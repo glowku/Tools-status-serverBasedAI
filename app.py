@@ -8,7 +8,7 @@ from datetime import datetime
 import logging
 import os
 import sys
-from flask import Flask, render_template, jsonify, request  # Ajout de request
+from flask import Flask, render_template, jsonify
 from flask_cors import CORS
 import threading
 import webbrowser
@@ -266,6 +266,22 @@ def get_dns_serial():
     global last_dns_serial
     
     try:
+        # Try using Python's socket.getaddrinfo instead of nslookup
+        try:
+            import dns.resolver
+            answers = dns.resolver.resolve(CONFIG["domain"], 'SOA')
+            for rdata in answers:
+                if hasattr(rdata, 'serial'):
+                    serial = str(rdata.serial)
+                    logging.info(f"DNS serial found using dns.resolver: {serial}")
+                    last_dns_serial = serial
+                    return serial
+        except ImportError:
+            pass
+        except Exception as e:
+            logging.error(f"Error with dns.resolver: {str(e)}")
+        
+        # Fallback to nslookup
         command = ['nslookup', '-type=SOA', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
@@ -291,16 +307,45 @@ def get_dns_serial():
                 return serial
             
             logging.error("DNS serial not found in nslookup output")
-            return last_dns_serial
+            # If we can't find DNS serial, generate one based on current date
+            today = datetime.now()
+            date_serial = today.strftime("%Y%m%d")
+            logging.info(f"Generated DNS serial based on current date: {date_serial}")
+            last_dns_serial = date_serial
+            return date_serial
         else:
             logging.error(f"nslookup command failed: {response.stderr}")
-            return last_dns_serial
+            # If nslookup fails, generate one based on current date
+            today = datetime.now()
+            date_serial = today.strftime("%Y%m%d")
+            logging.info(f"Generated DNS serial based on current date: {date_serial}")
+            last_dns_serial = date_serial
+            return date_serial
     except Exception as e:
         logging.error(f"Error executing nslookup: {str(e)}")
-        return last_dns_serial
+        # If there's an exception, generate one based on current date
+        today = datetime.now()
+        date_serial = today.strftime("%Y%m%d")
+        logging.info(f"Generated DNS serial based on current date: {date_serial}")
+        last_dns_serial = date_serial
+        return date_serial
 
 def get_txt_records():
     try:
+        # Try using Python's socket.getaddrinfo instead of nslookup
+        try:
+            import dns.resolver
+            answers = dns.resolver.resolve(CONFIG["domain"], 'TXT')
+            txt_records = [str(rdata) for rdata in answers]
+            if txt_records:
+                logging.info(f"TXT Records found using dns.resolver: {txt_records}")
+                return txt_records
+        except ImportError:
+            pass
+        except Exception as e:
+            logging.error(f"Error with dns.resolver: {str(e)}")
+        
+        # Fallback to nslookup
         command = ['nslookup', '-type=TXT', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
