@@ -1,11 +1,11 @@
 services:
   - type: web
     name: tools-status-serverBasedAI
-    env: docker
-    repo: https://github.com/votre-nom/votre-repo
-    dockerfilePath: ./Dockerfile
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
     envVars:
-      - key: PORT
-        value: 5000
-      - key: DISABLE_DNS_CHECKS
+      - key: PYTHON_VERSION
+        value: 3.9.12
+      - key: DISABLE_CHECKS
         value: true

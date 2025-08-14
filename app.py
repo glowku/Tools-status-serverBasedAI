@@ -84,6 +84,7 @@ def clear_screen():
 def check_rpc_endpoint():
     rpc_payload = {"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1}
     
+    # Essayer d'abord avec l'URL principale
     try:
         start_time = time.time()
         response = requests.post(
@@ -107,8 +108,33 @@ def check_rpc_endpoint():
             return {"status": "offline", "code": response.status_code}
             
     except requests.exceptions.RequestException as e:
+        logging.error(f"RPC request failed: {str(e)}")
+        
+        # Essayer avec les URLs de secours
+        for fallback_url in CONFIG["fallback_rpc_urls"]:
+            try:
+                start_time = time.time()
+                response = requests.post(
+                    fallback_url, 
+                    json=rpc_payload, 
+                    timeout=10
+                )
+                response_time = time.time() - start_time
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "result" in result:
+                        return {
+                            "status": "online",
+                            "chain_id": result["result"],
+                            "response_time": response_time,
+                            "source": fallback_url
+                        }
+            except requests.exceptions.RequestException:
+                continue
+        
+        # Si toutes les tentatives échouent
         return {"status": "offline", "message": str(e)}
-
 def check_ports():
     port_results = {}
     
@@ -131,15 +157,13 @@ def check_ports():
 
 def ping_host():
     try:
-        # Utiliser directement l'IP 89.116.49.136
-        ip = "89.116.49.136"
-        
+        # Essayer d'abord avec le domaine
         param = '-n' if os.name == 'nt' else '-c'
-        command = ['ping', param, '4', ip]
+        command = ['ping', param, '1', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         if response.returncode == 0:
-            # Chercher d'abord les temps individuels
+            # Chercher les temps dans la réponse
             time_patterns = [
                 r'Temps.*?=(\d+)ms',
                 r'Time.*?=(\d+)ms',
@@ -152,12 +176,11 @@ def ping_host():
             for pattern in time_patterns:
                 matches = re.findall(pattern, response.stdout)
                 if matches:
-                    # Prendre la dernière valeur trouvée
                     last_ping = float(matches[-1])
-                    if last_ping > 0:  # S'assurer que la valeur n'est pas 0
+                    if last_ping > 0:
                         return {"status": "success", "time": last_ping}
             
-            # Si aucun temps individuel trouvé, chercher la moyenne
+            # Si aucun temps trouvé, chercher la moyenne
             patterns = [
                 r'Moyenne = (\d+)ms',
                 r'Average = (\d+)ms',
@@ -169,16 +192,17 @@ def ping_host():
                 match = re.search(pattern, response.stdout)
                 if match:
                     avg_ping = float(match.group(1))
-                    if avg_ping > 0:  # S'assurer que la valeur n'est pas 0
+                    if avg_ping > 0:
                         return {"status": "success", "time": avg_ping}
             
-            # Si aucune valeur n'est trouvée, retourner une erreur
             return {"status": "error", "message": "No ping time found in output"}
         else:
             return {"status": "failed", "error": "Ping command failed"}
             
     except Exception as e:
+        logging.error(f"Error in ping_host: {str(e)}")
         return {"status": "error", "message": str(e)}
+
 
 def get_ip_info():
     try:
@@ -264,8 +288,9 @@ def get_main_domain_info():
     try:
         ip = socket.gethostbyname(CONFIG["main_domain"])
         result["ip"] = ip
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Error getting main domain IP: {str(e)}")
+        result["ip"] = "Error"
     
     try:
         response = requests.get(f"http://{CONFIG['main_domain']}", timeout=5, allow_redirects=True)
@@ -277,11 +302,11 @@ def get_main_domain_info():
                 result["redirect"] = f"→ {final_url}"
         else:
             result["redirect"] = "None"
-    except:
+    except Exception as e:
+        logging.error(f"Error checking main domain redirect: {str(e)}")
         result["redirect"] = "Error"
     
     return result
-
 def get_dns_serial():
     global last_dns_serial
     
@@ -737,9 +762,12 @@ def update_data():
     
     ping_status = ping_result.get("status", "error")
     
-    # Determine overall server status
-    server_status = "online"
-    if rpc_status != "online" or ping_status != "success":
+    # Déterminer le statut global du serveur
+    # Le serveur est considéré en ligne si au moins un des services essentiels fonctionne
+    essential_services = [rpc_status, ping_status]
+    if any(status in ["online", "success"] for status in essential_services):
+        server_status = "online"
+    else:
         server_status = "offline"
     
     # Check IP
@@ -876,6 +904,9 @@ def update_data():
     
     # Update history in latest_data
     latest_data["history"] = check_history.copy()
+
+
+
 def monitor_loop():
     while True:
         update_data()
