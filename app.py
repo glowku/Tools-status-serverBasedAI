@@ -361,6 +361,11 @@ def get_dns_serial():
 
 
 def get_txt_records():
+    # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
+    if CONFIG["disable_dns_checks"]:
+        logging.info("DNS checks disabled, using default TXT records")
+        return []
+    
     try:
         # Try using Python's socket.getaddrinfo instead of nslookup
         try:
@@ -402,8 +407,15 @@ def get_txt_records():
         logging.error(f"Error executing nslookup TXT: {str(e)}")
         return []
 
+
+
 def get_dns_records():
     dns_records = {}
+    
+    # Si les vérifications DNS sont désactivées, retourner des valeurs par défaut
+    if CONFIG["disable_dns_checks"]:
+        logging.info("DNS checks disabled, using default DNS records")
+        return {"A": [], "MX": [], "NS": []}
     
     # Get A records
     try:
@@ -457,7 +469,6 @@ def get_dns_records():
         logging.error(f"Error fetching NS records: {str(e)}")
     
     return dns_records
-
 def get_network_info():
     network_info = {}
     
@@ -702,14 +713,28 @@ def update_data():
     logging.info(f"Starting data update at {timestamp}")
     
     # Check RPC
-    rpc_result = check_rpc_endpoint()
+    try:
+        rpc_result = check_rpc_endpoint()
+    except Exception as e:
+        logging.error(f"Error checking RPC: {str(e)}")
+        rpc_result = {"status": "error", "message": str(e)}
+    
     rpc_status = rpc_result.get("status", "offline")
     
     # Check ports
-    port_results = check_ports()
+    try:
+        port_results = check_ports()
+    except Exception as e:
+        logging.error(f"Error checking ports: {str(e)}")
+        port_results = {}
     
     # Check ping
-    ping_result = ping_host()
+    try:
+        ping_result = ping_host()
+    except Exception as e:
+        logging.error(f"Error checking ping: {str(e)}")
+        ping_result = {"status": "error", "message": str(e)}
+    
     ping_status = ping_result.get("status", "error")
     
     # Determine overall server status
@@ -718,38 +743,78 @@ def update_data():
         server_status = "offline"
     
     # Check IP
-    ip_info = get_ip_info()
+    try:
+        ip_info = get_ip_info()
+    except Exception as e:
+        logging.error(f"Error getting IP info: {str(e)}")
+        ip_info = "Error"
     
     # Check HTTP
-    http_info = get_http_info()
+    try:
+        http_info = get_http_info()
+    except Exception as e:
+        logging.error(f"Error getting HTTP info: {str(e)}")
+        http_info = "Error"
     
     # Check security
-    security_info = get_security_info()
+    try:
+        security_info = get_security_info()
+    except Exception as e:
+        logging.error(f"Error getting security info: {str(e)}")
+        security_info = "Error"
     
     # Check SSL
-    ssl_info = get_ssl_info()
+    try:
+        ssl_info = get_ssl_info()
+    except Exception as e:
+        logging.error(f"Error getting SSL info: {str(e)}")
+        ssl_info = {"error": str(e)}
     
     # Check DNS
-    if current_time - (latest_data.get("last_dns_check", 0)) > CONFIG["dns_check_interval"]:
-        version_info = get_dns_serial()
-        latest_data["last_dns_check"] = current_time
-    else:
-        version_info = latest_data.get("version_info", "N/A")
+    try:
+        if current_time - (latest_data.get("last_dns_check", 0)) > CONFIG["dns_check_interval"]:
+            version_info = get_dns_serial()
+            latest_data["last_dns_check"] = current_time
+        else:
+            version_info = latest_data.get("version_info", "N/A")
+    except Exception as e:
+        logging.error(f"Error getting DNS version: {str(e)}")
+        version_info = "Error"
     
     # Check TXT Records
-    txt_info = get_txt_records()
+    try:
+        txt_info = get_txt_records()
+    except Exception as e:
+        logging.error(f"Error getting TXT records: {str(e)}")
+        txt_info = []
     
     # Check DNS records
-    dns_records = get_dns_records()
+    try:
+        dns_records = get_dns_records()
+    except Exception as e:
+        logging.error(f"Error getting DNS records: {str(e)}")
+        dns_records = {}
     
     # Check network info
-    network_info = get_network_info()
+    try:
+        network_info = get_network_info()
+    except Exception as e:
+        logging.error(f"Error getting network info: {str(e)}")
+        network_info = {}
     
     # Check transactions
-    transactions_info = get_latest_transactions()
+    try:
+        transactions_info = get_latest_transactions()
+    except Exception as e:
+        logging.error(f"Error getting transactions: {str(e)}")
+        transactions_info = {"error": str(e)}
     
     # Check main domain
-    main_domain_info = get_main_domain_info()
+    try:
+        main_domain_info = get_main_domain_info()
+    except Exception as e:
+        logging.error(f"Error getting main domain info: {str(e)}")
+        main_domain_info = {"ip": "Error", "redirect": "Error"}
     
     # Detect changes and anomalies
     current_results = {
@@ -769,7 +834,11 @@ def update_data():
         "timestamp": timestamp
     }
     
-    alerts = detect_changes(current_results)
+    try:
+        alerts = detect_changes(current_results)
+    except Exception as e:
+        logging.error(f"Error detecting changes: {str(e)}")
+        alerts = []
     
     # Update global data
     latest_data.update({
@@ -807,7 +876,6 @@ def update_data():
     
     # Update history in latest_data
     latest_data["history"] = check_history.copy()
-
 def monitor_loop():
     while True:
         update_data()
@@ -914,8 +982,8 @@ if __name__ == "__main__":
     app.run(host='0.0.0.0', port=CONFIG["web_port"], debug=False)
 
 
-    # Configuration pour Render
 if __name__ == "__main__":
+    # Configuration pour Render
     port = int(os.environ.get('PORT', 5000))
     
     # Initialize DNS serial
