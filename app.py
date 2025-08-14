@@ -15,8 +15,8 @@ import webbrowser
 import ssl
 import platform
 import concurrent.futures
-# Configuration
 
+# Configuration
 CONFIG = {
     "rpc_url": "http://mainnet.basedaibridge.com/rpc",
     "rpc_port": 8545,
@@ -34,7 +34,6 @@ CONFIG = {
         "https://rpc.ankr.com/eth",
         "https://cloudflare-eth.com"
     ],
-    # Ajout de cette ligne manquante
     "disable_dns_checks": os.environ.get('DISABLE_DNS_CHECKS', 'false').lower() == 'true',
     "disable_port_checks": os.environ.get('DISABLE_PORT_CHECKS', 'false').lower() == 'true',
     "ping_timeout": 5,
@@ -82,91 +81,19 @@ logging.basicConfig(
     ]
 )
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
-
-def check_rpc_endpoint():
+def tcp_ping(host, port=80, timeout=5):
     """
-    Vérifie le point de terminaison RPC avec une meilleure gestion des erreurs
+    Effectue un ping TCP plus rapide que HTTP
     """
-    rpc_payload = {"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1}
-    
-    # D'abord essayer avec l'URL principale
     try:
         start_time = time.time()
-        response = requests.post(
-            CONFIG["rpc_url"], 
-            json=rpc_payload, 
-            timeout=15  # Timeout plus long
-        )
-        response_time = time.time() - start_time
-        
-        if response.status_code == 200:
-            result = response.json()
-            if "result" in result:
-                return {
-                    "status": "online",
-                    "chain_id": result["result"],
-                    "response_time": response_time
-                }
-            else:
-                logging.error(f"Invalid RPC response: {result}")
-                return {"status": "offline", "message": "Invalid RPC response"}
-        else:
-            logging.error(f"RPC HTTP error: {response.status_code}")
-            return {"status": "offline", "code": response.status_code}
-            
-    except requests.exceptions.RequestException as e:
-        logging.error(f"RPC request failed: {str(e)}")
-        
-        # Essayer avec les URLs de secours
-        for fallback_url in CONFIG["fallback_rpc_urls"]:
-            try:
-                logging.info(f"Trying fallback RPC: {fallback_url}")
-                start_time = time.time()
-                response = requests.post(
-                    fallback_url, 
-                    json=rpc_payload, 
-                    timeout=15
-                )
-                response_time = time.time() - start_time
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    if "result" in result:
-                        logging.info(f"Successfully connected to fallback RPC: {fallback_url}")
-                        return {
-                            "status": "online",
-                            "chain_id": result["result"],
-                            "response_time": response_time,
-                            "source": fallback_url
-                        }
-            except requests.exceptions.RequestException as fallback_error:
-                logging.error(f"Fallback RPC failed: {fallback_url} - {str(fallback_error)}")
-                continue
-        
-        # Si toutes les tentatives échouent, retourner une erreur
-        return {"status": "offline", "message": "All RPC endpoints failed"}
-
-def check_ports():
-    port_results = {}
-    
-    for port in CONFIG["ports_to_check"]:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
-            result = sock.connect_ex((CONFIG["domain"], port))
-            sock.close()
-            
-            if result == 0:
-                port_results[port] = "open"
-            else:
-                port_results[port] = "closed"
-                
-        except Exception as e:
-            port_results[port] = "error"
-    
-    return port_results
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+        sock.close()
+        return (time.time() - start_time) * 1000  # Convertir en ms
+    except:
+        return None
 
 def ping_host():
     """
@@ -234,9 +161,128 @@ def ping_host():
         logging.error(f"HTTP ping failed: {str(e2)}")
         return {"status": "error", "message": "All ping methods failed"}
 
+def check_rpc_endpoint():
+    """
+    Vérifie le point de terminaison RPC avec une meilleure gestion des erreurs
+    """
+    rpc_payload = {"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1}
+    
+    # D'abord essayer avec l'URL principale
+    try:
+        start_time = time.time()
+        response = requests.post(
+            CONFIG["rpc_url"], 
+            json=rpc_payload, 
+            timeout=15  # Timeout plus long
+        )
+        response_time = time.time() - start_time
+        
+        if response.status_code == 200:
+            result = response.json()
+            if "result" in result:
+                return {
+                    "status": "online",
+                    "chain_id": result["result"],
+                    "response_time": response_time
+                }
+            else:
+                logging.error(f"Invalid RPC response: {result}")
+                return {"status": "offline", "message": "Invalid RPC response"}
+        else:
+            logging.error(f"RPC HTTP error: {response.status_code}")
+            return {"status": "offline", "code": response.status_code}
+            
+    except requests.exceptions.RequestException as e:
+        logging.error(f"RPC request failed: {str(e)}")
+        
+        # Essayer avec les URLs de secours
+        for fallback_url in CONFIG["fallback_rpc_urls"]:
+            try:
+                logging.info(f"Trying fallback RPC: {fallback_url}")
+                start_time = time.time()
+                response = requests.post(
+                    fallback_url, 
+                    json=rpc_payload, 
+                    timeout=15
+                )
+                response_time = time.time() - start_time
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if "result" in result:
+                        logging.info(f"Successfully connected to fallback RPC: {fallback_url}")
+                        return {
+                            "status": "online",
+                            "chain_id": result["result"],
+                            "response_time": response_time,
+                            "source": fallback_url
+                        }
+            except requests.exceptions.RequestException as fallback_error:
+                logging.error(f"Fallback RPC failed: {fallback_url} - {str(fallback_error)}")
+                continue
+        
+        # Si toutes les tentatives échouent, retourner une erreur
+        return {"status": "offline", "message": "All RPC endpoints failed"}
 
-
-
+def check_ports_alt():
+    """
+    Alternative à check_ports qui utilise des requêtes HTTP au lieu de sockets
+    """
+    port_results = {}
+    
+    # Si les vérifications de ports sont désactivées, retourner des valeurs par défaut
+    if CONFIG["disable_port_checks"]:
+        logging.info("Port checks disabled, using default values")
+        for port in CONFIG["ports_to_check"]:
+            if port in [80, 443]:
+                port_results[port] = "open"
+            else:
+                port_results[port] = "unknown"
+        return port_results
+    
+    # Pour les ports HTTP/HTTPS, utiliser des requêtes HTTP
+    if 80 in CONFIG["ports_to_check"]:
+        try:
+            response = requests.get(f"http://{CONFIG['domain']}", timeout=10)
+            port_results[80] = "open" if response.status_code < 500 else "closed"
+        except:
+            port_results[80] = "closed"
+    
+    if 443 in CONFIG["ports_to_check"]:
+        try:
+            response = requests.get(f"https://{CONFIG['domain']}", timeout=10)
+            port_results[443] = "open" if response.status_code < 500 else "closed"
+        except:
+            port_results[443] = "closed"
+    
+    # Pour les autres ports, utiliser socket si possible
+    for port in CONFIG["ports_to_check"]:
+        if port not in [80, 443]:  # On a déjà vérifié les ports 80 et 443
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(10)  # Timeout plus long
+                result = sock.connect_ex((CONFIG["domain"], port))
+                sock.close()
+                
+                if result == 0:
+                    port_results[port] = "open"
+                else:
+                    port_results[port] = "closed"
+                    
+            except Exception as e:
+                logging.error(f"Error checking port {port}: {str(e)}")
+                # En cas d'erreur, essayer avec une méthode alternative
+                try:
+                    # Essayer de se connecter via une requête HTTP si c'est un port web
+                    if port in [8080, 8000, 3000, 5000]:
+                        response = requests.get(f"http://{CONFIG['domain']}:{port}", timeout=10)
+                        port_results[port] = "open" if response.status_code < 500 else "closed"
+                    else:
+                        port_results[port] = "unknown"
+                except:
+                    port_results[port] = "unknown"
+    
+    return port_results
 
 def get_ip_info():
     try:
@@ -278,20 +324,6 @@ def get_ssl_info():
         ssl_info['error'] = str(e)
     
     return ssl_info
-
-def tcp_ping(host, port=80, timeout=5):
-    """
-    Effectue un ping TCP plus rapide que HTTP
-    """
-    try:
-        start_time = time.time()
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(timeout)
-        sock.connect((host, port))
-        sock.close()
-        return (time.time() - start_time) * 1000  # Convertir en ms
-    except:
-        return None
 
 def get_security_info():
     try:
@@ -782,7 +814,6 @@ def detect_changes(current_results):
     
     return alerts
 
-# Ajoutez cette fonction pour nettoyer les anciennes alertes
 def cleanup_expired_alerts():
     global latest_data
     current_time = time.time()
@@ -797,59 +828,6 @@ def cleanup_expired_alerts():
         # Limiter le nombre total d'alertes (max 10)
         if len(latest_data["alerts"]) > 10:
             latest_data["alerts"] = latest_data["alerts"][-10:]
-
-# Modifiez la fonction update_data
-# Modifiez la fonction check_ports_alt()
-def check_ports_alt():
-    """
-    Alternative à check_ports qui utilise des requêtes HTTP au lieu de sockets
-    """
-    port_results = {}
-    
-    # Pour les ports HTTP/HTTPS, utiliser des requêtes HTTP
-    if 80 in CONFIG["ports_to_check"]:
-        try:
-            response = requests.get(f"http://{CONFIG['domain']}", timeout=10)
-            port_results[80] = "open" if response.status_code < 500 else "closed"
-        except:
-            port_results[80] = "closed"
-    
-    if 443 in CONFIG["ports_to_check"]:
-        try:
-            response = requests.get(f"https://{CONFIG['domain']}", timeout=10)
-            port_results[443] = "open" if response.status_code < 500 else "closed"
-        except:
-            port_results[443] = "closed"
-    
-    # Pour les autres ports, utiliser socket si possible
-    for port in CONFIG["ports_to_check"]:
-        if port not in [80, 443]:  # On a déjà vérifié les ports 80 et 443
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(10)  # Timeout plus long
-                result = sock.connect_ex((CONFIG["domain"], port))
-                sock.close()
-                
-                if result == 0:
-                    port_results[port] = "open"
-                else:
-                    port_results[port] = "closed"
-                    
-            except Exception as e:
-                logging.error(f"Error checking port {port}: {str(e)}")
-                # En cas d'erreur, essayer avec une méthode alternative
-                try:
-                    # Essayer de se connecter via une requête HTTP si c'est un port web
-                    if port in [8080, 8000, 3000, 5000]:
-                        response = requests.get(f"http://{CONFIG['domain']}:{port}", timeout=10)
-                        port_results[port] = "open" if response.status_code < 500 else "closed"
-                    else:
-                        port_results[port] = "unknown"
-                except:
-                    port_results[port] = "unknown"
-    
-    return port_results
-
 
 def update_data():
     global latest_data, check_history
@@ -1075,35 +1053,7 @@ def ping_monitor_loop():
         latest_data["ping_history"] = ping_history.copy()
         time.sleep(ping_update_interval)
 
-
-
-# Ajoutez ces routes API pour la gestion des alertes
-@app.route('/api/dismiss_alert', methods=['POST'])
-def dismiss_alert():
-    global latest_data
-    
-    data = request.json
-    index = data.get('index')
-    
-    if index is not None and "alerts" in latest_data:
-        if 0 <= index < len(latest_data["alerts"]):
-            # Supprimer l'alerte
-            latest_data["alerts"].pop(index)
-            return jsonify({"success": True, "alerts": latest_data["alerts"]})
-    
-    return jsonify({"success": False})
-
-@app.route('/api/clear_alerts', methods=['POST'])
-def clear_alerts():
-    global latest_data
-    
-    latest_data["alerts"] = []
-    return jsonify({"success": True, "alerts": []})
-
-@app.route('/api/alerts')
-def get_alerts():
-    return jsonify(latest_data.get("alerts", []))
-
+# Routes Flask
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -1136,6 +1086,28 @@ def get_network():
 def get_transactions():
     return jsonify(latest_data.get("transactions", {}))
 
+@app.route('/api/dismiss_alert', methods=['POST'])
+def dismiss_alert():
+    global latest_data
+    
+    data = request.json
+    index = data.get('index')
+    
+    if index is not None and "alerts" in latest_data:
+        if 0 <= index < len(latest_data["alerts"]):
+            # Supprimer l'alerte
+            latest_data["alerts"].pop(index)
+            return jsonify({"success": True, "alerts": latest_data["alerts"]})
+    
+    return jsonify({"success": False})
+
+@app.route('/api/clear_alerts', methods=['POST'])
+def clear_alerts():
+    global latest_data
+    
+    latest_data["alerts"] = []
+    return jsonify({"success": True, "alerts": []})
+
 @app.route('/api/update_interval', methods=['POST'])
 def update_interval():
     global CONFIG
@@ -1153,7 +1125,6 @@ def update_interval():
     CONFIG["check_interval"] = interval
     return jsonify({"success": True, "interval": CONFIG["check_interval"]})
 
-# Modifiez la section principale pour Render
 if __name__ == "__main__":
     # Configuration pour Render
     port = int(os.environ.get('PORT', 5000))
