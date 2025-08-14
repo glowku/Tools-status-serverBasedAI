@@ -220,100 +220,100 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize latency chart
     const ctx = document.getElementById('latency-chart').getContext('2d');
-    const latencyChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [
-                {
-                    label: 'Ping (ms)',
-                    data: [],
-                    borderColor: '#00ff00',
-                    backgroundColor: 'rgba(0, 255, 0, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                },
-                {
-                    label: 'RPC (ms)',
-                    data: [],
-                    borderColor: '#ffff00',
-                    backgroundColor: 'rgba(255, 255, 0, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    min: 0,
-                    max: 300, // Set max to 300ms to show values between 140-180ms clearly
-                    title: {
-                        display: true,
-                        text: 'Latency (ms)',
-                        color: '#00ffff',
-                        font: {
-                            size: 12,
-                            family: "'Orbitron', monospace"
-                        }
-                    },
-                    grid: {
-                        color: 'rgba(0, 255, 255, 0.1)'
-                    },
-                    ticks: {
-                        color: '#00ffff',
-                        font: {
-                            family: "'Orbitron', monospace"
-                        },
-                        callback: function(value) {
-                            return value + ' ms';
-                        }
+  // Remplacez la configuration du graphique par celle-ci
+const latencyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [
+            {
+                label: 'Ping (ms)',
+                data: [],
+                borderColor: '#00ff00',
+                backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                tension: 0.4,
+                fill: true
+            },
+            {
+                label: 'RPC (ms)',
+                data: [],
+                borderColor: '#ffff00',
+                backgroundColor: 'rgba(255, 255, 0, 0.1)',
+                tension: 0.4,
+                fill: true
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                // Supprimer le min/max fixe pour permettre l'adaptation automatique
+                title: {
+                    display: true,
+                    text: 'Latency (ms)',
+                    color: '#00ffff',
+                    font: {
+                        size: 12,
+                        family: "'Orbitron', monospace"
                     }
                 },
-                x: {
-                    grid: {
-                        color: 'rgba(0, 255, 255, 0.1)'
+                grid: {
+                    color: 'rgba(0, 255, 255, 0.1)'
+                },
+                ticks: {
+                    color: '#00ffff',
+                    font: {
+                        family: "'Orbitron', monospace"
                     },
-                    ticks: {
-                        color: '#00ffff',
-                        font: {
-                            family: "'Orbitron', monospace"
-                        }
+                    callback: function(value) {
+                        return value + ' ms';
                     }
                 }
             },
-            plugins: {
-                legend: {
-                    labels: {
-                        color: '#00ffff',
-                        font: {
-                            family: "'Orbitron', monospace"
-                        }
-                    }
+            x: {
+                grid: {
+                    color: 'rgba(0, 255, 255, 0.1)'
                 },
-                tooltip: {
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    titleColor: '#00ffff',
-                    bodyColor: '#ffffff',
-                    borderColor: '#00ffff',
-                    borderWidth: 1,
-                    titleFont: {
+                ticks: {
+                    color: '#00ffff',
+                    font: {
                         family: "'Orbitron', monospace"
-                    },
-                    bodyFont: {
+                    }
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                labels: {
+                    color: '#00ffff',
+                    font: {
                         family: "'Orbitron', monospace"
-                    },
-                    callbacks: {
-                        label: function(context) {
-                            return context.dataset.label + ': ' + context.parsed.y + ' ms';
-                        }
+                    }
+                }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                titleColor: '#00ffff',
+                bodyColor: '#ffffff',
+                borderColor: '#00ffff',
+                borderWidth: 1,
+                titleFont: {
+                    family: "'Orbitron', monospace"
+                },
+                bodyFont: {
+                    family: "'Orbitron', monospace"
+                },
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ': ' + context.parsed.y + ' ms';
                     }
                 }
             }
         }
-    });
+    }
+});
     
     // Variable to store update interval
     let updateInterval;

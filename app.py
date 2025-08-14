@@ -14,7 +14,7 @@ import threading
 import webbrowser
 import ssl
 import platform
-
+import concurrent.futures
 # Configuration
 CONFIG = {
     "rpc_url": "http://mainnet.basedaibridge.com/rpc",
@@ -33,8 +33,9 @@ CONFIG = {
         "https://rpc.ankr.com/eth",
         "https://cloudflare-eth.com"
     ],
-    # Ajout d'une option pour désactiver les vérifications DNS
-    "disable_dns_checks": os.environ.get('DISABLE_DNS_CHECKS', 'false').lower() == 'true'
+     "ping_timeout": 5,  # Timeout pour le ping en secondes
+    "ping_retries": 3,   # Nombre de tentatives pour le ping
+    "use_tcp_ping": os.environ.get('USE_TCP_PING', 'true').lower() == 'true'  # Utiliser TCP ping sur Render
 }
 
 # Variables globales
@@ -165,29 +166,59 @@ def check_ports():
 
 def ping_host():
     """
-    Mesure la latence en utilisant différentes méthodes
+    Mesure la latence avec la méthode appropriée pour l'environnement
     """
-    # D'abord essayer avec la commande ping du système
+    # Sur Render, utiliser TCP ping qui est plus fiable
+    if os.environ.get('RENDER') == 'true' and CONFIG["use_tcp_ping"]:
+        try:
+            # Essayer plusieurs ports pour plus de fiabilité
+            ports = [80, 443]
+            results = []
+            
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [executor.submit(tcp_ping, CONFIG['domain'], port, CONFIG["ping_timeout"]) for port in ports]
+                
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if result is not None:
+                        results.append(result)
+            
+            if results:
+                # Prendre la valeur la plus basse
+                ping_time = min(results)
+                return {"status": "success", "time": ping_time}
+                
+        except Exception as e:
+            logging.error(f"TCP ping failed: {str(e)}")
+    
+    # Pour les autres environnements ou en cas d'échec, utiliser la méthode standard
     try:
         # Construire la commande ping en fonction du système d'exploitation
         param = '-n' if platform.system().lower() == 'windows' else '-c'
-        command = ['ping', param, '1', CONFIG['domain']]
+        command = ['ping', param, '3', CONFIG['domain']]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         if response.returncode == 0:
-            # Extraire le temps de ping
+            # Extraire les temps de ping et calculer la moyenne
             time_pattern = r'time[=<](\d+\.?\d*)\s*ms'
-            match = re.search(time_pattern, response.stdout)
-            if match:
-                ping_time = float(match.group(1))
+            times = re.findall(time_pattern, response.stdout)
+            
+            if times:
+                # Prendre la valeur médiane pour éviter les pics
+                times = sorted([float(t) for t in times])
+                if len(times) >= 3:
+                    ping_time = times[1]  # Médiane
+                else:
+                    ping_time = times[0]
+                
                 return {"status": "success", "time": ping_time}
     except Exception as e:
         logging.error(f"System ping failed: {str(e)}")
     
-    # Si le ping système échoue, essayer avec une requête HTTP
+    # Dernier recours : requête HTTP
     try:
         start_time = time.time()
-        response = requests.get(f"http://{CONFIG['domain']}", timeout=10)
+        response = requests.get(f"http://{CONFIG['domain']}", timeout=5)
         response_time = (time.time() - start_time) * 1000  # Convertir en ms
         
         if response.status_code == 200:
@@ -195,22 +226,13 @@ def ping_host():
         else:
             return {"status": "failed", "message": f"HTTP {response.status_code}"}
             
-    except requests.exceptions.RequestException as e:
-        # Si la requête HTTP échoue, essayer avec une adresse IP
-        try:
-            ip = socket.gethostbyname(CONFIG['domain'])
-            start_time = time.time()
-            response = requests.get(f"http://{ip}", timeout=10)
-            response_time = (time.time() - start_time) * 1000
-            
-            if response.status_code == 200:
-                return {"status": "success", "time": response_time}
-            else:
-                return {"status": "failed", "message": f"HTTP {response.status_code}"}
-                
-        except Exception as e2:
-            logging.error(f"HTTP ping failed: {str(e)}, IP fallback failed: {str(e2)}")
-            return {"status": "error", "message": f"HTTP ping failed: {str(e)}"}
+    except Exception as e2:
+        logging.error(f"HTTP ping failed: {str(e2)}")
+        return {"status": "error", "message": "All ping methods failed"}
+
+
+
+
 
 def get_ip_info():
     try:
@@ -252,6 +274,20 @@ def get_ssl_info():
         ssl_info['error'] = str(e)
     
     return ssl_info
+
+def tcp_ping(host, port=80, timeout=5):
+    """
+    Effectue un ping TCP plus rapide que HTTP
+    """
+    try:
+        start_time = time.time()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((host, port))
+        sock.close()
+        return (time.time() - start_time) * 1000  # Convertir en ms
+    except:
+        return None
 
 def get_security_info():
     try:
