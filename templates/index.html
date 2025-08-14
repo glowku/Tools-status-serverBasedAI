@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BasedAI Bridge Monitor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="particles-js"></div>
+    
+    <div class="container">
+        <div class="header">
+            <div class="server-status" id="server-status">
+                <i class="fas fa-circle"></i> <span id="server-status-text">Checking...</span>
+            </div>
+            <h1 class="title">BASEDAI BRIDGE MONITOR</h1>
+            <p class="subtitle">Real-time monitoring of the BasedAI ecosystem</p>
+            <div class="sync-indicator" id="sync-indicator">
+                <i class="fas fa-sync-alt"></i> <span id="sync-status">Synchronizing...</span>
+            </div>
+        </div>
+        
+        <div class="status-cards">
+            <div class="status-card rpc-card">
+                <div class="card-icon">
+                    <i class="fas fa-network-wired"></i>
+                </div>
+                <div class="card-content">
+                    <h3>RPC Endpoint</h3>
+                    <div class="status-value" id="rpc-status">Loading...</div>
+                    <div class="metric-value" id="rpc-metric">-- ms</div>
+                </div>
+            </div>
+            
+            <div class="status-card ping-card">
+                <div class="card-icon">
+                    <i class="fas fa-satellite-dish"></i>
+                </div>
+                <div class="card-content">
+                    <h3>Ping</h3>
+                    <div class="status-value" id="ping-status">Loading...</div>
+                    <div class="metric-value" id="ping-metric">-- ms</div>
+                </div>
+            </div>
+            
+            <div class="status-card dns-card">
+                <div class="card-icon">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div class="card-content">
+                    <h3>DNS Version</h3>
+                    <div class="status-value" id="dns-version">Loading...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="details-section">
+            <div class="section-title">
+                <h2>Detailed Information</h2>
+                <div class="last-update">Last check: <span id="last-check">Loading...</span></div>
+            </div>
+            
+            <div class="details-grid">
+                <div class="detail-item">
+                    <div class="detail-icon">
+                        <i class="fas fa-globe"></i>
+                    </div>
+                    <div class="detail-content">
+                        <h4>IP (subdomain)</h4>
+                        <div class="detail-value" id="ip-subdomain">Loading...</div>
+                    </div>
+                </div>
+                
+                <div class="detail-item">
+                    <div class="detail-icon">
+                        <i class="fas fa-globe-americas"></i>
+                    </div>
+                    <div class="detail-content">
+                        <h4>IP (domain)</h4>
+                        <div class="detail-value" id="ip-domain">Loading...</div>
+                    </div>
+                </div>
+                
+                <div class="detail-item">
+                    <div class="detail-icon">
+                        <i class="fas fa-exchange-alt"></i>
+                    </div>
+                    <div class="detail-content">
+                        <h4>Redirection</h4>
+                        <div class="detail-value" id="redirect">Loading...</div>
+                    </div>
+                </div>
+                
+                <div class="detail-item">
+                    <div class="detail-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="detail-content">
+                        <h4>SSL</h4>
+                        <div class="detail-value" id="security">Loading...</div>
+                    </div>
+                </div>
+                
+                <div class="detail-item">
+                    <div class="detail-icon">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div class="detail-content">
+                        <h4>TXT Records</h4>
+                        <div class="detail-value" id="txt-records">Loading...</div>
+                    </div>
+                </div>
+                
+                <div class="detail-item">
+                    <div class="detail-icon">
+                        <i class="fas fa-plug"></i>
+                    </div>
+                    <div class="detail-content">
+                        <h4>Ports</h4>
+                        <div class="ports-container" id="ports-status">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="transactions-section">
+            <div class="section-title">
+                <h2>Transaction Information</h2>
+            </div>
+            <div class="transactions-container">
+                <div class="transaction-item">
+                    <h4>Latest Block</h4>
+                    <div id="latest-block">Loading...</div>
+                </div>
+                <div class="transaction-item">
+                    <h4>Transaction Count</h4>
+                    <div id="tx-count">Loading...</div>
+                </div>
+                <div class="transaction-item">
+                    <h4>Data Source</h4>
+                    <div id="tx-source">Loading...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="ssl-section">
+            <div class="section-title">
+                <h2>SSL Information</h2>
+            </div>
+            <div class="ssl-container">
+                <div class="ssl-item">
+                    <h4>Issuer</h4>
+                    <div id="ssl-issuer">Loading...</div>
+                </div>
+                <div class="ssl-item">
+                    <h4>Subject</h4>
+                    <div id="ssl-subject">Loading...</div>
+                </div>
+                <div class="ssl-item">
+                    <h4>Expiration</h4>
+                    <div id="ssl-expiry">Loading...</div>
+                </div>
+                <div class="ssl-item">
+                    <h4>Days Remaining</h4>
+                    <div id="ssl-days-left">Loading...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="history-section">
+            <div class="section-title">
+                <h2>Latency History</h2>
+            </div>
+            <div class="chart-container">
+                <canvas id="latency-chart"></canvas>
+            </div>
+        </div>
+        
+        <div class="alerts-section">
+            <div class="section-title">
+                <h2>Recent Alerts</h2>
+            </div>
+            <div class="alerts-container" id="alerts-container">
+                <div class="no-alerts">No alerts</div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="3d-background"></div>
+    
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
