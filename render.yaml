@@ -1,8 +1,9 @@
 services:
   - type: web
-    name: basedai-monitor
+    name: tools-status-serverBasedAI
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
     envVars:
-      PYTHON_VERSION: 3.9.6
+      - key: PYTHON_VERSION
+        value: 3.9.12
