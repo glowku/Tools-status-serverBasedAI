@@ -1,8 +1,31 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize unified background with particles and 3D cubes
     function initUnifiedBackground() {
-        const container = document.getElementById('unified-background');
-        if (!container) return;
+    const container = document.getElementById('unified-background');
+    if (!container) return;
+    
+    // Créer un élément pour le dégradé radial
+    const gradientDiv = document.createElement('div');
+    gradientDiv.style.position = 'absolute';
+    gradientDiv.style.top = '0';
+    gradientDiv.style.left = '0';
+    gradientDiv.style.width = '100%';
+    gradientDiv.style.height = '100%';
+    gradientDiv.style.zIndex = '0';
+    gradientDiv.style.background = 'radial-gradient(circle at center, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))';
+    gradientDiv.style.backgroundSize = '200% 200%';
+    container.appendChild(gradientDiv);
+    
+    // Animer le dégradé
+    let angle = 0;
+    function animateGradient() {
+        angle += 0.5;
+        const x = 50 + 50 * Math.cos(angle * Math.PI / 180);
+        const y = 50 + 50 * Math.sin(angle * Math.PI / 180);
+        gradientDiv.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))`;
+        requestAnimationFrame(animateGradient);
+    }
+    animateGradient();
         
         // Create canvas for particles
         const particlesCanvas = document.createElement('canvas');
@@ -102,6 +125,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         animateParticles();
+        
         
         // Initialize 3D scene
         const scene = new THREE.Scene();
@@ -492,18 +516,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Function to update ports
-    function updatePorts(ports) {
-        const container = document.getElementById('ports-status');
-        container.innerHTML = '';
-        
-        for (const [port, status] of Object.entries(ports)) {
-            const portElement = document.createElement('div');
-            portElement.className = `port-item ${status}`;
-            portElement.textContent = `${port}: ${status}`;
-            container.appendChild(portElement);
-        }
+   // Modifiez la fonction updatePorts() pour mieux gérer les données manquantes
+function updatePorts(ports) {
+    const container = document.getElementById('ports-status');
+    container.innerHTML = '';
+    
+    if (!ports || Object.keys(ports).length === 0) {
+        container.innerHTML = '<div class="no-ports">No port data available</div>';
+        return;
     }
+    
+    for (const [port, status] of Object.entries(ports)) {
+        const portElement = document.createElement('div');
+        portElement.className = `port-item ${status}`;
+        portElement.textContent = `${port}: ${status}`;
+        container.appendChild(portElement);
+    }
+}
     
     // Function to update alerts
     function updateAlerts(alerts) {

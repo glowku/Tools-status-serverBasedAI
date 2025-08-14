@@ -13,8 +13,8 @@ from flask_cors import CORS
 import threading
 import webbrowser
 import ssl
+import platform
 
-# Configuration
 # Configuration
 CONFIG = {
     "rpc_url": "http://mainnet.basedaibridge.com/rpc",
@@ -43,7 +43,6 @@ previous_results = {}
 last_dns_serial = None
 ping_history = []
 ping_update_interval = 5  # Secondes entre les mises à jour du ping
-
 latest_data = {
     "rpc_status": "unknown",
     "ping_status": "unknown",
@@ -144,7 +143,6 @@ def check_rpc_endpoint():
         # Si toutes les tentatives échouent, retourner une erreur
         return {"status": "offline", "message": "All RPC endpoints failed"}
 
-
 def check_ports():
     port_results = {}
     
@@ -167,10 +165,27 @@ def check_ports():
 
 def ping_host():
     """
-    Alternative à ping qui utilise des requêtes HTTP pour mesurer la latence
+    Mesure la latence en utilisant différentes méthodes
     """
+    # D'abord essayer avec la commande ping du système
     try:
-        # Essayer d'abord une requête HTTP simple
+        # Construire la commande ping en fonction du système d'exploitation
+        param = '-n' if platform.system().lower() == 'windows' else '-c'
+        command = ['ping', param, '1', CONFIG['domain']]
+        response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        if response.returncode == 0:
+            # Extraire le temps de ping
+            time_pattern = r'time[=<](\d+\.?\d*)\s*ms'
+            match = re.search(time_pattern, response.stdout)
+            if match:
+                ping_time = float(match.group(1))
+                return {"status": "success", "time": ping_time}
+    except Exception as e:
+        logging.error(f"System ping failed: {str(e)}")
+    
+    # Si le ping système échoue, essayer avec une requête HTTP
+    try:
         start_time = time.time()
         response = requests.get(f"http://{CONFIG['domain']}", timeout=10)
         response_time = (time.time() - start_time) * 1000  # Convertir en ms
@@ -382,8 +397,6 @@ def get_dns_serial():
         last_dns_serial = date_serial
         return date_serial
 
-
-
 def get_txt_records():
     # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
     if CONFIG["disable_dns_checks"]:
@@ -430,8 +443,6 @@ def get_txt_records():
     except Exception as e:
         logging.error(f"Error executing nslookup TXT: {str(e)}")
         return []
-
-
 
 def get_dns_records():
     dns_records = {}
@@ -493,6 +504,7 @@ def get_dns_records():
         logging.error(f"Error fetching NS records: {str(e)}")
     
     return dns_records
+
 def get_network_info():
     network_info = {}
     
@@ -728,45 +740,34 @@ def detect_changes(current_results):
     
     return alerts
 
-
-
+# Modifiez la fonction check_ports_alt()
 def check_ports_alt():
     """
     Alternative à check_ports qui utilise des requêtes HTTP au lieu de sockets
     """
     port_results = {}
     
-    # Si les vérifications de ports sont désactivées, retourner des valeurs par défaut
-    if CONFIG["disable_port_checks"]:
-        logging.info("Port checks disabled, using default values")
-        for port in CONFIG["ports_to_check"]:
-            if port in [80, 443]:
-                port_results[port] = "open"
-            else:
-                port_results[port] = "unknown"
-        return port_results
-    
     # Pour les ports HTTP/HTTPS, utiliser des requêtes HTTP
     if 80 in CONFIG["ports_to_check"]:
         try:
-            response = requests.get(f"http://{CONFIG['domain']}", timeout=5)
+            response = requests.get(f"http://{CONFIG['domain']}", timeout=10)
             port_results[80] = "open" if response.status_code < 500 else "closed"
         except:
             port_results[80] = "closed"
     
     if 443 in CONFIG["ports_to_check"]:
         try:
-            response = requests.get(f"https://{CONFIG['domain']}", timeout=5)
+            response = requests.get(f"https://{CONFIG['domain']}", timeout=10)
             port_results[443] = "open" if response.status_code < 500 else "closed"
         except:
             port_results[443] = "closed"
     
-    # Pour les autres ports, utiliser socket si possible, sinon marquer comme inconnu
+    # Pour les autres ports, utiliser socket si possible
     for port in CONFIG["ports_to_check"]:
-        if port not in port_results:
+        if port not in [80, 443]:  # On a déjà vérifié les ports 80 et 443
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(5)
+                sock.settimeout(10)  # Timeout plus long
                 result = sock.connect_ex((CONFIG["domain"], port))
                 sock.close()
                 
@@ -777,7 +778,16 @@ def check_ports_alt():
                     
             except Exception as e:
                 logging.error(f"Error checking port {port}: {str(e)}")
-                port_results[port] = "unknown"
+                # En cas d'erreur, essayer avec une méthode alternative
+                try:
+                    # Essayer de se connecter via une requête HTTP si c'est un port web
+                    if port in [8080, 8000, 3000, 5000]:
+                        response = requests.get(f"http://{CONFIG['domain']}:{port}", timeout=10)
+                        port_results[port] = "open" if response.status_code < 500 else "closed"
+                    else:
+                        port_results[port] = "unknown"
+                except:
+                    port_results[port] = "unknown"
     
     return port_results
 
@@ -958,7 +968,6 @@ def update_data():
     # Update history in latest_data
     latest_data["history"] = check_history.copy()
 
-
 def monitor_loop():
     while True:
         update_data()
@@ -1036,35 +1045,7 @@ def update_interval():
     CONFIG["check_interval"] = interval
     return jsonify({"success": True, "interval": CONFIG["check_interval"]})
 
-if __name__ == "__main__":
-    # Initialize DNS serial
-    if last_dns_serial is None:
-        logging.info("Initial DNS serial retrieval...")
-        last_dns_serial = get_dns_serial()
-        latest_data["version_info"] = last_dns_serial
-    
-    # Perform first data update
-    logging.info("First data update...")
-    update_data()
-    
-    # Start background monitoring
-    monitor_thread = threading.Thread(target=monitor_loop)
-    monitor_thread.daemon = True
-    monitor_thread.start()
-    
-    # Start ping monitoring
-    ping_monitor_thread = threading.Thread(target=ping_monitor_loop)
-    ping_monitor_thread.daemon = True
-    ping_monitor_thread.start()
-    
-    # Open browser
-    webbrowser.open(f'http://localhost:{CONFIG["web_port"]}')
-    
-    # Start web server
-    print(f"Web server started at http://localhost:{CONFIG['web_port']}")
-    app.run(host='0.0.0.0', port=CONFIG["web_port"], debug=False)
-
-
+# Modifiez la section principale pour Render
 if __name__ == "__main__":
     # Configuration pour Render
     port = int(os.environ.get('PORT', 5000))
