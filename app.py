@@ -16,6 +16,7 @@ import ssl
 import platform
 import concurrent.futures
 # Configuration
+
 CONFIG = {
     "rpc_url": "http://mainnet.basedaibridge.com/rpc",
     "rpc_port": 8545,
@@ -33,9 +34,12 @@ CONFIG = {
         "https://rpc.ankr.com/eth",
         "https://cloudflare-eth.com"
     ],
-     "ping_timeout": 5,  # Timeout pour le ping en secondes
-    "ping_retries": 3,   # Nombre de tentatives pour le ping
-    "use_tcp_ping": os.environ.get('USE_TCP_PING', 'true').lower() == 'true'  # Utiliser TCP ping sur Render
+    # Ajout de cette ligne manquante
+    "disable_dns_checks": os.environ.get('DISABLE_DNS_CHECKS', 'false').lower() == 'true',
+    "disable_port_checks": os.environ.get('DISABLE_PORT_CHECKS', 'false').lower() == 'true',
+    "ping_timeout": 5,
+    "ping_retries": 3,
+    "use_tcp_ping": os.environ.get('USE_TCP_PING', 'true').lower() == 'true'
 }
 
 # Variables globales
