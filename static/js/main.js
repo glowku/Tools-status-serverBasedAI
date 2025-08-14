@@ -467,7 +467,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     latencyChart.update();
                 }
                 
-                document.getElementById('sync-status').textContent = 'Synchronisé';
+                document.getElementById('sync-status').textContent = 'Synchronised';
             })
             .catch(error => {
                 console.error('Error fetching data:', error);

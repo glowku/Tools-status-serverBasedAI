@@ -82,15 +82,18 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def check_rpc_endpoint():
+    """
+    Vérifie le point de terminaison RPC avec une meilleure gestion des erreurs
+    """
     rpc_payload = {"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1}
     
-    # Essayer d'abord avec l'URL principale
+    # D'abord essayer avec l'URL principale
     try:
         start_time = time.time()
         response = requests.post(
             CONFIG["rpc_url"], 
             json=rpc_payload, 
-            timeout=10
+            timeout=15  # Timeout plus long
         )
         response_time = time.time() - start_time
         
@@ -103,8 +106,10 @@ def check_rpc_endpoint():
                     "response_time": response_time
                 }
             else:
+                logging.error(f"Invalid RPC response: {result}")
                 return {"status": "offline", "message": "Invalid RPC response"}
         else:
+            logging.error(f"RPC HTTP error: {response.status_code}")
             return {"status": "offline", "code": response.status_code}
             
     except requests.exceptions.RequestException as e:
@@ -113,28 +118,33 @@ def check_rpc_endpoint():
         # Essayer avec les URLs de secours
         for fallback_url in CONFIG["fallback_rpc_urls"]:
             try:
+                logging.info(f"Trying fallback RPC: {fallback_url}")
                 start_time = time.time()
                 response = requests.post(
                     fallback_url, 
                     json=rpc_payload, 
-                    timeout=10
+                    timeout=15
                 )
                 response_time = time.time() - start_time
                 
                 if response.status_code == 200:
                     result = response.json()
                     if "result" in result:
+                        logging.info(f"Successfully connected to fallback RPC: {fallback_url}")
                         return {
                             "status": "online",
                             "chain_id": result["result"],
                             "response_time": response_time,
                             "source": fallback_url
                         }
-            except requests.exceptions.RequestException:
+            except requests.exceptions.RequestException as fallback_error:
+                logging.error(f"Fallback RPC failed: {fallback_url} - {str(fallback_error)}")
                 continue
         
-        # Si toutes les tentatives échouent
-        return {"status": "offline", "message": str(e)}
+        # Si toutes les tentatives échouent, retourner une erreur
+        return {"status": "offline", "message": "All RPC endpoints failed"}
+
+
 def check_ports():
     port_results = {}
     
@@ -156,53 +166,36 @@ def check_ports():
     return port_results
 
 def ping_host():
+    """
+    Alternative à ping qui utilise des requêtes HTTP pour mesurer la latence
+    """
     try:
-        # Essayer d'abord avec le domaine
-        param = '-n' if os.name == 'nt' else '-c'
-        command = ['ping', param, '1', CONFIG["domain"]]
-        response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        # Essayer d'abord une requête HTTP simple
+        start_time = time.time()
+        response = requests.get(f"http://{CONFIG['domain']}", timeout=10)
+        response_time = (time.time() - start_time) * 1000  # Convertir en ms
         
-        if response.returncode == 0:
-            # Chercher les temps dans la réponse
-            time_patterns = [
-                r'Temps.*?=(\d+)ms',
-                r'Time.*?=(\d+)ms',
-                r'time[=<](\d+)ms',
-                r'time=(\d+)ms',
-                r'<(\d+)ms',
-                r'=(\d+)ms'
-            ]
-            
-            for pattern in time_patterns:
-                matches = re.findall(pattern, response.stdout)
-                if matches:
-                    last_ping = float(matches[-1])
-                    if last_ping > 0:
-                        return {"status": "success", "time": last_ping}
-            
-            # Si aucun temps trouvé, chercher la moyenne
-            patterns = [
-                r'Moyenne = (\d+)ms',
-                r'Average = (\d+)ms',
-                r'rtt min/avg/max/mdev = [\d.]+/([\d.]+)/[\d.]+/[\d.]+ ms',
-                r'Avg = (\d+)ms',
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, response.stdout)
-                if match:
-                    avg_ping = float(match.group(1))
-                    if avg_ping > 0:
-                        return {"status": "success", "time": avg_ping}
-            
-            return {"status": "error", "message": "No ping time found in output"}
+        if response.status_code == 200:
+            return {"status": "success", "time": response_time}
         else:
-            return {"status": "failed", "error": "Ping command failed"}
+            return {"status": "failed", "message": f"HTTP {response.status_code}"}
             
-    except Exception as e:
-        logging.error(f"Error in ping_host: {str(e)}")
-        return {"status": "error", "message": str(e)}
-
+    except requests.exceptions.RequestException as e:
+        # Si la requête HTTP échoue, essayer avec une adresse IP
+        try:
+            ip = socket.gethostbyname(CONFIG['domain'])
+            start_time = time.time()
+            response = requests.get(f"http://{ip}", timeout=10)
+            response_time = (time.time() - start_time) * 1000
+            
+            if response.status_code == 200:
+                return {"status": "success", "time": response_time}
+            else:
+                return {"status": "failed", "message": f"HTTP {response.status_code}"}
+                
+        except Exception as e2:
+            logging.error(f"HTTP ping failed: {str(e)}, IP fallback failed: {str(e2)}")
+            return {"status": "error", "message": f"HTTP ping failed: {str(e)}"}
 
 def get_ip_info():
     try:
@@ -283,8 +276,12 @@ def get_security_info():
         return f"Error: {str(e)}"
 
 def get_main_domain_info():
+    """
+    Récupère les informations du domaine principal avec une meilleure gestion des erreurs
+    """
     result = {"ip": "N/A", "redirect": "N/A"}
     
+    # Récupérer l'IP
     try:
         ip = socket.gethostbyname(CONFIG["main_domain"])
         result["ip"] = ip
@@ -292,8 +289,9 @@ def get_main_domain_info():
         logging.error(f"Error getting main domain IP: {str(e)}")
         result["ip"] = "Error"
     
+    # Vérifier la redirection
     try:
-        response = requests.get(f"http://{CONFIG['main_domain']}", timeout=5, allow_redirects=True)
+        response = requests.get(f"http://{CONFIG['main_domain']}", timeout=10, allow_redirects=True)
         if response.history:
             final_url = response.url
             if CONFIG["domain"] in final_url:
@@ -307,6 +305,7 @@ def get_main_domain_info():
         result["redirect"] = "Error"
     
     return result
+
 def get_dns_serial():
     global last_dns_serial
     
@@ -729,6 +728,60 @@ def detect_changes(current_results):
     
     return alerts
 
+
+
+def check_ports_alt():
+    """
+    Alternative à check_ports qui utilise des requêtes HTTP au lieu de sockets
+    """
+    port_results = {}
+    
+    # Si les vérifications de ports sont désactivées, retourner des valeurs par défaut
+    if CONFIG["disable_port_checks"]:
+        logging.info("Port checks disabled, using default values")
+        for port in CONFIG["ports_to_check"]:
+            if port in [80, 443]:
+                port_results[port] = "open"
+            else:
+                port_results[port] = "unknown"
+        return port_results
+    
+    # Pour les ports HTTP/HTTPS, utiliser des requêtes HTTP
+    if 80 in CONFIG["ports_to_check"]:
+        try:
+            response = requests.get(f"http://{CONFIG['domain']}", timeout=5)
+            port_results[80] = "open" if response.status_code < 500 else "closed"
+        except:
+            port_results[80] = "closed"
+    
+    if 443 in CONFIG["ports_to_check"]:
+        try:
+            response = requests.get(f"https://{CONFIG['domain']}", timeout=5)
+            port_results[443] = "open" if response.status_code < 500 else "closed"
+        except:
+            port_results[443] = "closed"
+    
+    # Pour les autres ports, utiliser socket si possible, sinon marquer comme inconnu
+    for port in CONFIG["ports_to_check"]:
+        if port not in port_results:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(5)
+                result = sock.connect_ex((CONFIG["domain"], port))
+                sock.close()
+                
+                if result == 0:
+                    port_results[port] = "open"
+                else:
+                    port_results[port] = "closed"
+                    
+            except Exception as e:
+                logging.error(f"Error checking port {port}: {str(e)}")
+                port_results[port] = "unknown"
+    
+    return port_results
+
+
 def update_data():
     global latest_data, check_history
     
@@ -746,14 +799,14 @@ def update_data():
     
     rpc_status = rpc_result.get("status", "offline")
     
-    # Check ports
+    # Check ports - utiliser la fonction alternative
     try:
-        port_results = check_ports()
+        port_results = check_ports_alt()
     except Exception as e:
         logging.error(f"Error checking ports: {str(e)}")
         port_results = {}
     
-    # Check ping
+    # Check ping - utiliser la fonction alternative
     try:
         ping_result = ping_host()
     except Exception as e:
@@ -904,7 +957,6 @@ def update_data():
     
     # Update history in latest_data
     latest_data["history"] = check_history.copy()
-
 
 
 def monitor_loop():

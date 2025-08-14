@@ -7,5 +7,5 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.12
-      - key: DISABLE_CHECKS
+      - key: DISABLE_PORT_CHECKS
         value: true
