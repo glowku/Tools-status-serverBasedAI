@@ -15,6 +15,7 @@ import webbrowser
 import ssl
 
 # Configuration
+# Configuration
 CONFIG = {
     "rpc_url": "http://mainnet.basedaibridge.com/rpc",
     "rpc_port": 8545,
@@ -31,7 +32,9 @@ CONFIG = {
         "https://eth.public-rpc.com",
         "https://rpc.ankr.com/eth",
         "https://cloudflare-eth.com"
-    ]
+    ],
+    # Ajout d'une option pour désactiver les vérifications DNS
+    "disable_dns_checks": os.environ.get('DISABLE_DNS_CHECKS', 'false').lower() == 'true'
 }
 
 # Variables globales
@@ -282,6 +285,14 @@ def get_main_domain_info():
 def get_dns_serial():
     global last_dns_serial
     
+    # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
+    if CONFIG["disable_dns_checks"]:
+        logging.info("DNS checks disabled, using default serial")
+        today = datetime.now()
+        date_serial = today.strftime("%Y%m%d")
+        last_dns_serial = date_serial
+        return date_serial
+    
     try:
         # Try using Python's socket.getaddrinfo instead of nslookup
         try:
@@ -299,62 +310,56 @@ def get_dns_serial():
             logging.error(f"Error with dns.resolver: {str(e)}")
         
         # Fallback to nslookup
-        try:
-            command = ['nslookup', '-type=SOA', CONFIG["domain"]]
-            response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        command = ['nslookup', '-type=SOA', CONFIG["domain"]]
+        response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        if response.returncode == 0:
+            patterns = [
+                r'serial\s*=\s*(\d+)',
+                r'serial\s*(\d+)',
+            ]
             
-            if response.returncode == 0:
-                patterns = [
-                    r'serial\s*=\s*(\d+)',
-                    r'serial\s*(\d+)',
-                ]
-                
-                for pattern in patterns:
-                    match = re.search(pattern, response.stdout)
-                    if match:
-                        serial = match.group(1)
-                        logging.info(f"DNS serial found: {serial}")
-                        last_dns_serial = serial
-                        return serial
-                
-                serial_match = re.search(r'\b(\d{10})\b', response.stdout)
-                if serial_match:
-                    serial = serial_match.group(1)
-                    logging.info(f"DNS serial found (10 digits format): {serial}")
+            for pattern in patterns:
+                match = re.search(pattern, response.stdout)
+                if match:
+                    serial = match.group(1)
+                    logging.info(f"DNS serial found: {serial}")
                     last_dns_serial = serial
                     return serial
-                
-                logging.error("DNS serial not found in nslookup output")
-                # If we can't find DNS serial, generate one based on current date
-                today = datetime.now()
-                date_serial = today.strftime("%Y%m%d")
-                logging.info(f"Generated DNS serial based on current date: {date_serial}")
-                last_dns_serial = date_serial
-                return date_serial
-            else:
-                logging.error(f"nslookup command failed: {response.stderr}")
-                # If nslookup fails, generate one based on current date
-                today = datetime.now()
-                date_serial = today.strftime("%Y%m%d")
-                logging.info(f"Generated DNS serial based on current date: {date_serial}")
-                last_dns_serial = date_serial
-                return date_serial
-        except Exception as e:
-            logging.error(f"Error executing nslookup: {str(e)}")
-            # If there's an exception, generate one based on current date
+            
+            serial_match = re.search(r'\b(\d{10})\b', response.stdout)
+            if serial_match:
+                serial = serial_match.group(1)
+                logging.info(f"DNS serial found (10 digits format): {serial}")
+                last_dns_serial = serial
+                return serial
+            
+            logging.error("DNS serial not found in nslookup output")
+            # If we can't find DNS serial, generate one based on current date
+            today = datetime.now()
+            date_serial = today.strftime("%Y%m%d")
+            logging.info(f"Generated DNS serial based on current date: {date_serial}")
+            last_dns_serial = date_serial
+            return date_serial
+        else:
+            logging.error(f"nslookup command failed: {response.stderr}")
+            # If nslookup fails, generate one based on current date
             today = datetime.now()
             date_serial = today.strftime("%Y%m%d")
             logging.info(f"Generated DNS serial based on current date: {date_serial}")
             last_dns_serial = date_serial
             return date_serial
     except Exception as e:
-        logging.error(f"Unexpected error in get_dns_serial: {str(e)}")
-        # If there's an unexpected error, generate one based on current date
+        logging.error(f"Error executing nslookup: {str(e)}")
+        # If there's an exception, generate one based on current date
         today = datetime.now()
         date_serial = today.strftime("%Y%m%d")
         logging.info(f"Generated DNS serial based on current date: {date_serial}")
         last_dns_serial = date_serial
         return date_serial
+
+
+
 def get_txt_records():
     try:
         # Try using Python's socket.getaddrinfo instead of nslookup
