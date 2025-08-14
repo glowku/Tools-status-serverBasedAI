@@ -645,26 +645,28 @@ def detect_changes(current_results):
         previous_results = current_results.copy()
         return alerts
     
-    # Check for ping latency changes
+    # Check for ping latency changes - seulement si significatif
     if "ping" in current_results and "ping" in previous_results:
         if current_results["ping"]["status"] == "success" and previous_results["ping"]["status"] == "success":
             current_ping = current_results["ping"]["time"]
             previous_ping = previous_results["ping"]["time"]
             
-            if current_ping > previous_ping * (1 + CONFIG["latency_threshold"]):
+            # Seulement si la différence est supérieure à 50ms et relative > 20%
+            if abs(current_ping - previous_ping) > 50 and current_ping > previous_ping * 1.2:
                 alerts.append({
                     "type": "latency_ping",
-                    "message": f"⚠️ Ping latency increased: {previous_ping:.2f}ms → {current_ping:.2f}ms",
+                    "message": f"⚠️ Ping latency increased: {previous_ping:.0f}ms → {current_ping:.0f}ms",
                     "severity": "warning"
                 })
     
-    # Check for RPC latency changes
+    # Check for RPC latency changes - seulement si significatif
     if "rpc" in current_results and "rpc" in previous_results:
         if current_results["rpc"]["status"] == "online" and previous_results["rpc"]["status"] == "online":
             current_rpc = current_results["rpc"]["response_time"]
             previous_rpc = previous_results["rpc"]["response_time"]
             
-            if current_rpc > previous_rpc * (1 + CONFIG["latency_threshold"]):
+            # Seulement si la différence est supérieure à 0.2s et relative > 20%
+            if abs(current_rpc - previous_rpc) > 0.2 and current_rpc > previous_rpc * 1.2:
                 alerts.append({
                     "type": "latency_rpc",
                     "message": f"⚠️ RPC latency increased: {previous_rpc:.2f}s → {current_rpc:.2f}s",
@@ -780,6 +782,23 @@ def detect_changes(current_results):
     
     return alerts
 
+# Ajoutez cette fonction pour nettoyer les anciennes alertes
+def cleanup_expired_alerts():
+    global latest_data
+    current_time = time.time()
+    
+    if "alerts" in latest_data:
+        # Supprimer les alertes expirées (plus de 30 minutes)
+        latest_data["alerts"] = [
+            alert for alert in latest_data["alerts"] 
+            if current_time - alert.get("timestamp", 0) < 1800  # 30 minutes = 1800 secondes
+        ]
+        
+        # Limiter le nombre total d'alertes (max 10)
+        if len(latest_data["alerts"]) > 10:
+            latest_data["alerts"] = latest_data["alerts"][-10:]
+
+# Modifiez la fonction update_data
 # Modifiez la fonction check_ports_alt()
 def check_ports_alt():
     """
@@ -840,6 +859,9 @@ def update_data():
     
     logging.info(f"Starting data update at {timestamp}")
     
+    # Nettoyer les alertes expirées
+    cleanup_expired_alerts()
+    
     # Check RPC
     try:
         rpc_result = check_rpc_endpoint()
@@ -866,7 +888,6 @@ def update_data():
     ping_status = ping_result.get("status", "error")
     
     # Déterminer le statut global du serveur
-    # Le serveur est considéré en ligne si au moins un des services essentiels fonctionne
     essential_services = [rpc_status, ping_status]
     if any(status in ["online", "success"] for status in essential_services):
         server_status = "online"
@@ -947,7 +968,7 @@ def update_data():
         logging.error(f"Error getting main domain info: {str(e)}")
         main_domain_info = {"ip": "Error", "redirect": "Error"}
     
-    # Detect changes and anomalies
+    # Détecter les changements et anomalies
     current_results = {
         "rpc": rpc_result,
         "ports": port_results,
@@ -966,10 +987,28 @@ def update_data():
     }
     
     try:
-        alerts = detect_changes(current_results)
+        new_alerts = detect_changes(current_results)
+        # Ajouter un timestamp à chaque nouvelle alerte
+        for alert in new_alerts:
+            alert["timestamp"] = current_time
+        alerts = new_alerts
     except Exception as e:
         logging.error(f"Error detecting changes: {str(e)}")
         alerts = []
+    
+    # Mettre à jour les alertes en évitant les doublons récents
+    if "alerts" not in latest_data:
+        latest_data["alerts"] = []
+    
+    # Vérifier les doublons (même message dans les 5 dernières minutes)
+    existing_messages = [
+        alert["message"] for alert in latest_data["alerts"] 
+        if current_time - alert.get("timestamp", 0) < 300  # 5 minutes
+    ]
+    
+    for alert in alerts:
+        if alert["message"] not in existing_messages:
+            latest_data["alerts"].append(alert)
     
     # Update global data
     latest_data.update({
@@ -990,10 +1029,10 @@ def update_data():
         "main_domain_info": main_domain_info,
         "port_statuses": port_results,
         "last_check": timestamp,
-        "alerts": alerts
+        "alerts": latest_data["alerts"]  # Utiliser les alertes mises à jour
     })
     
-    logging.info(f"Data updated with {len(alerts)} alerts")
+    logging.info(f"Data updated with {len(latest_data['alerts'])} alerts")
     
     # Add to history
     check_history.append({
@@ -1035,6 +1074,35 @@ def ping_monitor_loop():
         
         latest_data["ping_history"] = ping_history.copy()
         time.sleep(ping_update_interval)
+
+
+
+# Ajoutez ces routes API pour la gestion des alertes
+@app.route('/api/dismiss_alert', methods=['POST'])
+def dismiss_alert():
+    global latest_data
+    
+    data = request.json
+    index = data.get('index')
+    
+    if index is not None and "alerts" in latest_data:
+        if 0 <= index < len(latest_data["alerts"]):
+            # Supprimer l'alerte
+            latest_data["alerts"].pop(index)
+            return jsonify({"success": True, "alerts": latest_data["alerts"]})
+    
+    return jsonify({"success": False})
+
+@app.route('/api/clear_alerts', methods=['POST'])
+def clear_alerts():
+    global latest_data
+    
+    latest_data["alerts"] = []
+    return jsonify({"success": True, "alerts": []})
+
+@app.route('/api/alerts')
+def get_alerts():
+    return jsonify(latest_data.get("alerts", []))
 
 @app.route('/')
 def index():

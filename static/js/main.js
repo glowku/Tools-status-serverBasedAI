@@ -365,20 +365,20 @@ const latencyChart = new Chart(ctx, {
         }, 2000);
     });
     
-    // Function to update data
-    function updateData() {
-        console.log("Updating data...");
-        document.getElementById('sync-status').textContent = 'Synchronizing...';
-        
-        fetch('/api/data')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log("Data received:", data);
+// Modifier la fonction updateData() pour inclure la mise à jour des alertes
+function updateData() {
+    console.log("Updating data...");
+    document.getElementById('sync-status').textContent = 'Synchronizing...';
+    
+    fetch('/api/data')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("Data received:", data);
                 
                 // Update server status
                 const serverStatusElement = document.getElementById('server-status');
@@ -491,12 +491,16 @@ const latencyChart = new Chart(ctx, {
                     latencyChart.update();
                 }
                 
-                document.getElementById('sync-status').textContent = 'Synchronised';
-            })
-            .catch(error => {
-                console.error('Error fetching data:', error);
-                document.getElementById('sync-status').textContent = 'Sync Error';
-            });
+                   // Update alerts
+            updateAlerts(data.alerts);
+            
+            document.getElementById('sync-status').textContent = 'Synchronised';
+        })
+        .catch(error => {
+            console.error('Error fetching data:', error);
+            document.getElementById('sync-status').textContent = 'Sync Error';
+        });
+
     }
     
     // Function to update a status
@@ -534,34 +538,191 @@ function updatePorts(ports) {
     }
 }
     
-    // Function to update alerts
-    function updateAlerts(alerts) {
-        const container = document.getElementById('alerts-container');
-        container.innerHTML = '';
+   // Fonction pour mettre à jour les alertes
+function updateAlerts(alerts) {
+    const container = document.getElementById('alerts-container');
+    const currentAlertCount = container.querySelectorAll('.alert-item').length;
+    
+    container.innerHTML = '';
+    
+    if (alerts.length === 0) {
+        container.innerHTML = '<div class="no-alerts">No alerts</div>';
+        return;
+    }
+    
+    // Ajouter un bouton pour tout effacer
+    const clearAllBtn = document.createElement('div');
+    clearAllBtn.className = 'clear-all-btn';
+    clearAllBtn.innerHTML = '<i class="fas fa-trash"></i> Clear All';
+    clearAllBtn.onclick = clearAllAlerts;
+    container.appendChild(clearAllBtn);
+    
+    alerts.forEach((alert, index) => {
+        const alertElement = document.createElement('div');
+        alertElement.className = `alert-item ${alert.severity}`;
+        alertElement.dataset.index = index;
         
-        if (alerts.length === 0) {
-            container.innerHTML = '<div class="no-alerts">No alerts</div>';
-            return;
+        // Ajouter la classe 'new' aux alertes qui viennent d'apparaître
+        if (index >= currentAlertCount) {
+            alertElement.classList.add('new');
         }
         
-        alerts.forEach(alert => {
-            const alertElement = document.createElement('div');
-            alertElement.className = `alert-item ${alert.severity}`;
+        let iconClass = 'info';
+        if (alert.severity === 'warning') iconClass = 'warning';
+        else if (alert.severity === 'critical') iconClass = 'critical';
+        
+        // Calculer le temps restant avant expiration
+        let timeRemaining = '';
+        if (alert.timestamp) {
+            const now = Date.now() / 1000; // Convertir en secondes
+            const elapsed = now - alert.timestamp;
+            const remaining = Math.max(0, 1800 - elapsed); // 30 minutes = 1800 secondes
             
-            let iconClass = 'info';
-            if (alert.severity === 'warning') iconClass = 'warning';
-            else if (alert.severity === 'critical') iconClass = 'critical';
-            
-            alertElement.innerHTML = `
+            if (remaining > 0) {
+                const minutes = Math.floor(remaining / 60);
+                const seconds = Math.floor(remaining % 60);
+                timeRemaining = `<div class="alert-timer" data-index="${index}">Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}</div>`;
+            }
+        }
+        
+        alertElement.innerHTML = `
+            <div class="alert-header">
                 <div class="alert-icon ${iconClass}">
                     <i class="fas fa-${iconClass === 'info' ? 'info-circle' : iconClass === 'warning' ? 'exclamation-triangle' : 'times-circle'}"></i>
                 </div>
-                <div>${alert.message}</div>
-            `;
-            
-            container.appendChild(alertElement);
+                <div class="alert-actions">
+                    <div class="alert-type">${alert.type}</div>
+                    <div class="alert-close" onclick="dismissAlert(${index})">
+                        <i class="fas fa-times"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="alert-content">
+                <div class="alert-message">${alert.message}</div>
+                ${timeRemaining}
+            </div>
+        `;
+        
+        container.appendChild(alertElement);
+    });
+    
+    // Démarrer le compte à rebours pour les alertes
+    startAlertTimers();
+}
+
+// Fonction pour supprimer une alerte individuelle
+function dismissAlert(index) {
+    fetch('/api/dismiss_alert', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ index: index })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            updateAlerts(data.alerts);
+            showNotification('Alert dismissed', 'success');
+        }
+    })
+    .catch(error => {
+        console.error('Error dismissing alert:', error);
+        showNotification('Error dismissing alert', 'error');
+    });
+}
+
+// Fonction pour supprimer toutes les alertes
+function clearAllAlerts() {
+    if (confirm('Are you sure you want to clear all alerts?')) {
+        fetch('/api/clear_alerts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateAlerts([]);
+                showNotification('All alerts cleared', 'success');
+            }
+        })
+        .catch(error => {
+            console.error('Error clearing alerts:', error);
+            showNotification('Error clearing alerts', 'error');
         });
     }
+}
+
+// Fonction pour gérer les compte à rebours
+function startAlertTimers() {
+    // Mettre à jour les compte à rebours toutes les secondes
+    setInterval(() => {
+        const timers = document.querySelectorAll('.alert-timer');
+        timers.forEach(timer => {
+            const index = parseInt(timer.dataset.index);
+            
+            // Récupérer les données d'alerte mises à jour
+            fetch('/api/data')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.alerts && data.alerts[index]) {
+                        const alert = data.alerts[index];
+                        const now = Date.now() / 1000;
+                        const elapsed = now - alert.timestamp;
+                        const remaining = Math.max(0, 1800 - elapsed);
+                        
+                        if (remaining > 0) {
+                            const minutes = Math.floor(remaining / 60);
+                            const seconds = Math.floor(remaining % 60);
+                            timer.textContent = `Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                            
+                            // Changer la couleur quand il reste moins de 5 minutes
+                            if (remaining < 300) {
+                                timer.style.color = '#ff9800';
+                            }
+                            if (remaining < 60) {
+                                timer.style.color = '#f44336';
+                            }
+                        } else {
+                            // L'alerte a expiré, la supprimer
+                            const alertItem = timer.closest('.alert-item');
+                            if (alertItem) {
+                                alertItem.style.opacity = '0';
+                                setTimeout(() => alertItem.remove(), 300);
+                            }
+                        }
+                    }
+                });
+        });
+    }, 1000);
+}
+
+// Fonction pour afficher des notifications
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animation d'apparition
+    setTimeout(() => notification.classList.add('show'), 10);
+    
+    // Disparaître après 3 secondes
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+
     
     // Function to update chart
     function updateChart(history) {
