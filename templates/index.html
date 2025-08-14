@@ -7,12 +7,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div id="particles-js"></div>
-    <div id="3d-background"></div>
+    <!-- Arrière-plan unifié -->
+    <div id="unified-background"></div>
     
     <div class="menu-bar" id="menu-bar">
         <div class="menu-container">
@@ -34,17 +33,6 @@
             <p class="subtitle">Real-time monitoring of the BasedAI ecosystem</p>
             <div class="sync-indicator" id="sync-indicator">
                 <i class="fas fa-sync-alt"></i> <span id="sync-status">Synchronizing...</span>
-            </div>
-            <div class="update-interval-control">
-                <label for="interval-value">Chart Update Interval:</label>
-                <input type="number" id="interval-value" min="1" value="1">
-                <select id="interval-unit">
-                    <option value="seconds">Seconds</option>
-                    <option value="minutes">Minutes</option>
-                    <option value="hours">Hours</option>
-                    <option value="days">Days</option>
-                </select>
-                <button id="apply-interval">Apply</button>
             </div>
         </div>
         
@@ -197,7 +185,18 @@
         
         <div class="history-section">
             <div class="section-title">
-                <h2>Latency History</h2>
+                <h2>Real-time Ping History</h2>
+                <div class="update-interval-control">
+                    <label for="interval-value">Chart Update Interval:</label>
+                    <input type="number" id="interval-value" min="1" value="1">
+                    <select id="interval-unit">
+                        <option value="seconds">Seconds</option>
+                        <option value="minutes">Minutes</option>
+                        <option value="hours">Hours</option>
+                        <option value="days">Days</option>
+                    </select>
+                    <button id="apply-interval">Apply</button>
+                </div>
             </div>
             <div class="chart-container">
                 <canvas id="latency-chart"></canvas>

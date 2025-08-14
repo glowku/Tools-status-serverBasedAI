@@ -1,139 +1,180 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize particles (reduced)
-    particlesJS('particles-js', {
-        particles: {
-            number: {
-                value: 20,
-                density: {
-                    enable: true,
-                    value_area: 800
-                }
-            },
-            color: {
-                value: "#00ffff"
-            },
-            shape: {
-                type: "circle",
-                stroke: {
-                    width: 0,
-                    color: "#000000"
-                }
-            },
-            opacity: {
-                value: 0.3,
-                random: false,
-                anim: {
-                    enable: false
-                }
-            },
-            size: {
-                value: 2,
-                random: true
-            },
-            line_linked: {
-                enable: true,
-                distance: 150,
-                color: "#00ffff",
-                opacity: 0.2,
-                width: 1
-            },
-            move: {
-                enable: true,
-                speed: 1,
-                direction: "none",
-                random: false,
-                straight: false,
-                out_mode: "out",
-                bounce: false
-            }
-        },
-        interactivity: {
-            detect_on: "canvas",
-            events: {
-                onhover: {
-                    enable: true,
-                    mode: "grab"
-                },
-                onclick: {
-                    enable: true,
-                    mode: "push"
-                },
-                resize: true
-            }
-        },
-        retina_detect: true
-    });
-    
-    // Initialize 3D background with square cubes
-    function init3DBackground() {
-        const container = document.getElementById('3d-background');
+    // Initialize unified background with particles and 3D cubes
+    function initUnifiedBackground() {
+        const container = document.getElementById('unified-background');
         if (!container) return;
         
-        // Remove existing content
-        while (container.firstChild) {
-            container.removeChild(container.firstChild);
+        // Create canvas for particles
+        const particlesCanvas = document.createElement('canvas');
+        particlesCanvas.style.position = 'absolute';
+        particlesCanvas.style.top = '0';
+        particlesCanvas.style.left = '0';
+        particlesCanvas.style.width = '100%';
+        particlesCanvas.style.height = '100%';
+        particlesCanvas.style.zIndex = '1';
+        container.appendChild(particlesCanvas);
+        
+        // Create container for 3D scene
+        const threeContainer = document.createElement('div');
+        threeContainer.style.position = 'absolute';
+        threeContainer.style.top = '0';
+        threeContainer.style.left = '0';
+        threeContainer.style.width = '100%';
+        threeContainer.style.height = '100%';
+        threeContainer.style.zIndex = '2';
+        container.appendChild(threeContainer);
+        
+        // Initialize particles
+        const particlesCtx = particlesCanvas.getContext('2d');
+        particlesCanvas.width = window.innerWidth;
+        particlesCanvas.height = window.innerHeight;
+        
+        const particlesArray = [];
+        const numberOfParticles = 50;
+        
+        class Particle {
+            constructor() {
+                this.x = Math.random() * particlesCanvas.width;
+                this.y = Math.random() * particlesCanvas.height;
+                this.size = Math.random() * 2 + 1;
+                this.speedX = Math.random() * 1 - 0.5;
+                this.speedY = Math.random() * 1 - 0.5;
+                this.opacity = Math.random() * 0.5 + 0.2;
+            }
+            
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                
+                if (this.x > particlesCanvas.width || this.x < 0) {
+                    this.speedX = -this.speedX;
+                }
+                
+                if (this.y > particlesCanvas.height || this.y < 0) {
+                    this.speedY = -this.speedY;
+                }
+            }
+            
+            draw() {
+                particlesCtx.fillStyle = `rgba(0, 255, 255, ${this.opacity})`;
+                particlesCtx.beginPath();
+                particlesCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                particlesCtx.fill();
+            }
         }
         
+        // Create particles
+        for (let i = 0; i < numberOfParticles; i++) {
+            particlesArray.push(new Particle());
+        }
+        
+        // Draw connections between particles
+        function connectParticles() {
+            for (let a = 0; a < particlesArray.length; a++) {
+                for (let b = a; b < particlesArray.length; b++) {
+                    const dx = particlesArray[a].x - particlesArray[b].x;
+                    const dy = particlesArray[a].y - particlesArray[b].y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 100) {
+                        particlesCtx.strokeStyle = `rgba(0, 255, 255, ${0.1 * (1 - distance/100)})`;
+                        particlesCtx.lineWidth = 0.5;
+                        particlesCtx.beginPath();
+                        particlesCtx.moveTo(particlesArray[a].x, particlesArray[a].y);
+                        particlesCtx.lineTo(particlesArray[b].x, particlesArray[b].y);
+                        particlesCtx.stroke();
+                    }
+                }
+            }
+        }
+        
+        // Animation loop for particles
+        function animateParticles() {
+            particlesCtx.clearRect(0, 0, particlesCanvas.width, particlesCanvas.height);
+            
+            for (let i = 0; i < particlesArray.length; i++) {
+                particlesArray[i].update();
+                particlesArray[i].draw();
+            }
+            
+            connectParticles();
+            requestAnimationFrame(animateParticles);
+        }
+        
+        animateParticles();
+        
+        // Initialize 3D scene
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0x000000, 0);
-        container.appendChild(renderer.domElement);
+        threeContainer.appendChild(renderer.domElement);
         
-        // Create 3D cubes (square 1:1)
+        // Create 3D cubes
         const geometry = new THREE.BoxGeometry(1, 1, 1);
         const material = new THREE.MeshBasicMaterial({ 
             color: 0x00ffff,
             wireframe: true,
             transparent: true,
-            opacity: 0.2
+            opacity: 0.1
         });
         
         const cubes = [];
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 10; i++) {
             const cube = new THREE.Mesh(geometry, material);
-            cube.position.x = (Math.random() - 0.5) * 50;
-            cube.position.y = (Math.random() - 0.5) * 50;
-            cube.position.z = (Math.random() - 0.5) * 50;
+            cube.position.x = (Math.random() - 0.5) * 30;
+            cube.position.y = (Math.random() - 0.5) * 30;
+            cube.position.z = (Math.random() - 0.5) * 30;
             cube.rotation.x = Math.random() * Math.PI;
             cube.rotation.y = Math.random() * Math.PI;
             scene.add(cube);
             cubes.push(cube);
         }
         
-        camera.position.z = 30;
+        camera.position.z = 20;
         
         // 3D Animation
-        function animate() {
-            requestAnimationFrame(animate);
+        function animate3D() {
+            requestAnimationFrame(animate3D);
             
             cubes.forEach(cube => {
-                cube.rotation.x += 0.005;
-                cube.rotation.y += 0.005;
+                cube.rotation.x += 0.003;
+                cube.rotation.y += 0.003;
+                
+                // Add movement to cubes
+                cube.position.x += Math.sin(Date.now() * 0.001 + cube.id) * 0.005;
+                cube.position.y += Math.cos(Date.now() * 0.001 + cube.id) * 0.005;
             });
             
             renderer.render(scene, camera);
         }
-        animate();
+        animate3D();
         
         // Handle resize
         window.addEventListener('resize', function() {
+            particlesCanvas.width = window.innerWidth;
+            particlesCanvas.height = window.innerHeight;
+            
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
     }
     
-    // Initialize 3D background
-    init3DBackground();
+    // Initialize unified background
+    initUnifiedBackground();
     
     // Handle menu visibility on scroll
     const menuBar = document.getElementById('menu-bar');
     let lastScrollTop = 0;
+    let scrollTimeout;
     
     window.addEventListener('scroll', function() {
         const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        
+        // Clear the timeout
+        clearTimeout(scrollTimeout);
         
         if (scrollTop > lastScrollTop && scrollTop > 100) {
             // Scrolling down
@@ -142,6 +183,13 @@ document.addEventListener('DOMContentLoaded', function() {
             // Scrolling up or at top
             menuBar.classList.remove('hidden');
         }
+        
+        // Set a timeout to show the menu if the user stops scrolling
+        scrollTimeout = setTimeout(function() {
+            if (scrollTop <= 100) {
+                menuBar.classList.remove('hidden');
+            }
+        }, 1000);
         
         lastScrollTop = scrollTop;
     });
@@ -243,8 +291,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Variable to store chart update interval
-    let chartUpdateInterval;
+    // Variable to store update interval
+    let updateInterval;
+    let pingUpdateInterval;
+    let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
     
     // Handle update interval
     document.getElementById('apply-interval').addEventListener('click', function() {
@@ -252,14 +302,22 @@ document.addEventListener('DOMContentLoaded', function() {
         const unit = document.getElementById('interval-unit').value;
         
         // Clear existing interval
-        if (chartUpdateInterval) {
-            clearInterval(chartUpdateInterval);
+        if (updateInterval) {
+            clearInterval(updateInterval);
         }
         
         // Calculate interval in milliseconds
         let intervalMs;
         if (unit === 'seconds') {
             intervalMs = value * 1000;
+            // If the unit is seconds and value is 1 or 2, update the ping chart interval too
+            if (value <= 2) {
+                chartUpdateInterval = intervalMs;
+                if (pingUpdateInterval) {
+                    clearInterval(pingUpdateInterval);
+                }
+                pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
+            }
         } else if (unit === 'minutes') {
             intervalMs = value * 60 * 1000;
         } else if (unit === 'hours') {
@@ -268,8 +326,8 @@ document.addEventListener('DOMContentLoaded', function() {
             intervalMs = value * 24 * 60 * 60 * 1000;
         }
         
-        // Set new interval for chart updates only
-        chartUpdateInterval = setInterval(updateChart, intervalMs);
+        // Set new interval for data updates
+        updateInterval = setInterval(updateData, intervalMs);
         
         // Show success message
         const applyButton = document.getElementById('apply-interval');
@@ -316,15 +374,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Update metrics - ensure we show actual values, not 0
                 if (data.rpc_value !== null && data.rpc_value !== undefined) {
-                    document.getElementById('rpc-metric').textContent = `${(data.rpc_value * 1000).toFixed(2)} ms`;
+                    // Convert from seconds to milliseconds if needed
+                    const rpcMs = data.rpc_value < 1 ? data.rpc_value * 1000 : data.rpc_value;
+                    document.getElementById('rpc-metric').textContent = `${rpcMs.toFixed(2)} ms`;
                 } else {
                     document.getElementById('rpc-metric').textContent = '-- ms';
                 }
                 
+                // Gérer spécifiquement les valeurs de ping
                 if (data.ping_value !== null && data.ping_value !== undefined && data.ping_value > 0) {
                     document.getElementById('ping-metric').textContent = `${data.ping_value.toFixed(2)} ms`;
                 } else {
-                    document.getElementById('ping-metric').textContent = '-- ms';
+                    document.getElementById('ping-metric').textContent = 'No data';
                 }
                 
                 document.getElementById('dns-version').textContent = data.version_info || 'N/A';
@@ -384,8 +445,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update alerts
                 updateAlerts(data.alerts);
                 
-                // Update chart
-                updateChart(data.history);
+                // Mettre à jour le graphique avec les données de ping filtrées
+                if (data.ping_history && data.ping_history.length > 0) {
+                    const labels = data.ping_history.map(h => {
+                        const date = new Date(h.timestamp);
+                        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+                    });
+                    
+                    const pingData = data.ping_history.map(h => h.ping || 0);
+                    const rpcData = data.ping_history.map(h => {
+                        // Convert from seconds to milliseconds if needed
+                        return (h.rpc || 0) < 1 ? (h.rpc || 0) * 1000 : (h.rpc || 0);
+                    });
+                    
+                    // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
+                    const filteredPingData = pingData.map(value => value > 0 ? value : null);
+                    
+                    latencyChart.data.labels = labels;
+                    latencyChart.data.datasets[0].data = filteredPingData;
+                    latencyChart.data.datasets[1].data = rpcData;
+                    latencyChart.update();
+                }
                 
                 document.getElementById('sync-status').textContent = 'Synchronisé';
             })
@@ -464,20 +544,63 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         const pingData = history.map(h => h.ping || 0);
-        const rpcData = history.map(h => (h.rpc || 0) * 1000); // Convert to ms
+        const rpcData = history.map(h => {
+            // Convert from seconds to milliseconds if needed
+            return (h.rpc || 0) < 1 ? (h.rpc || 0) * 1000 : (h.rpc || 0);
+        });
+        
+        // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
+        const filteredPingData = pingData.map(value => value > 0 ? value : null);
         
         latencyChart.data.labels = labels;
-        latencyChart.data.datasets[0].data = pingData;
+        latencyChart.data.datasets[0].data = filteredPingData;
         latencyChart.data.datasets[1].data = rpcData;
         latencyChart.update();
+    }
+    
+    // Function to update ping chart in real-time
+    function updatePingChart() {
+        fetch('/api/data')
+            .then(response => response.json())
+            .then(data => {
+                // Mettre à jour les valeurs de ping en temps réel
+                if (data.ping_value !== null && data.ping_value !== undefined && data.ping_value > 0) {
+                    document.getElementById('ping-metric').textContent = `${data.ping_value.toFixed(2)} ms`;
+                } else {
+                    // Si pas de valeur valide, afficher "No data"
+                    document.getElementById('ping-metric').textContent = 'No data';
+                }
+                
+                // Mettre à jour le statut
+                updateStatus('ping-status', data.ping_status);
+                
+                // Mettre à jour le graphique avec l'historique du ping
+                if (data.ping_history && data.ping_history.length > 0) {
+                    const labels = data.ping_history.map(h => {
+                        const date = new Date(h.timestamp);
+                        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
+                    });
+                    
+                    const pingData = data.ping_history.map(h => h.ping || 0);
+                    
+                    // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
+                    const filteredPingData = pingData.map(value => value > 0 ? value : null);
+                    
+                    // Only update the ping dataset, keep RPC data as is
+                    latencyChart.data.labels = labels;
+                    latencyChart.data.datasets[0].data = filteredPingData;
+                    latencyChart.update('none'); // Mettre à jour sans animation pour un rendu plus fluide
+                }
+            })
+            .catch(error => console.error('Error updating ping chart:', error));
     }
     
     // Initial update
     updateData();
     
-    // Periodic update for data (every 60 seconds)
-    setInterval(updateData, 60000);
+    // Set initial update interval (60 seconds)
+    updateInterval = setInterval(updateData, 60000);
     
-    // Initial chart update interval (every 60 seconds)
-    chartUpdateInterval = setInterval(updateChart, 60000);
+    // Set ping update interval (2 seconds)
+    pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
 });

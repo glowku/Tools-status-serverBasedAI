@@ -8,7 +8,7 @@ from datetime import datetime
 import logging
 import os
 import sys
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
 import threading
 import webbrowser
@@ -38,6 +38,9 @@ CONFIG = {
 check_history = []
 previous_results = {}
 last_dns_serial = None
+ping_history = []
+ping_update_interval = 5  # Secondes entre les mises à jour du ping
+
 latest_data = {
     "rpc_status": "unknown",
     "ping_status": "unknown",
@@ -55,7 +58,8 @@ latest_data = {
     "ssl_info": {},
     "dns_records": {},
     "network_info": {},
-    "transactions": {}
+    "transactions": {},
+    "ping_history": []
 }
 
 app = Flask(__name__)
@@ -78,11 +82,13 @@ def check_rpc_endpoint():
     rpc_payload = {"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1}
     
     try:
+        start_time = time.time()
         response = requests.post(
             CONFIG["rpc_url"], 
             json=rpc_payload, 
             timeout=10
         )
+        response_time = time.time() - start_time
         
         if response.status_code == 200:
             result = response.json()
@@ -90,7 +96,7 @@ def check_rpc_endpoint():
                 return {
                     "status": "online",
                     "chain_id": result["result"],
-                    "response_time": response.elapsed.total_seconds()
+                    "response_time": response_time
                 }
             else:
                 return {"status": "offline", "message": "Invalid RPC response"}
@@ -122,14 +128,35 @@ def check_ports():
 
 def ping_host():
     try:
-        ip = socket.gethostbyname(CONFIG["domain"])
+        # Utiliser directement l'IP 89.116.49.136
+        ip = "89.116.49.136"
         
         param = '-n' if os.name == 'nt' else '-c'
         command = ['ping', param, '4', ip]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         if response.returncode == 0:
+            # Chercher d'abord les temps individuels
+            time_patterns = [
+                r'Temps.*?=(\d+)ms',
+                r'Time.*?=(\d+)ms',
+                r'time[=<](\d+)ms',
+                r'time=(\d+)ms',
+                r'<(\d+)ms',
+                r'=(\d+)ms'
+            ]
+            
+            for pattern in time_patterns:
+                matches = re.findall(pattern, response.stdout)
+                if matches:
+                    # Prendre la dernière valeur trouvée
+                    last_ping = float(matches[-1])
+                    if last_ping > 0:  # S'assurer que la valeur n'est pas 0
+                        return {"status": "success", "time": last_ping}
+            
+            # Si aucun temps individuel trouvé, chercher la moyenne
             patterns = [
+                r'Moyenne = (\d+)ms',
                 r'Average = (\d+)ms',
                 r'rtt min/avg/max/mdev = [\d.]+/([\d.]+)/[\d.]+/[\d.]+ ms',
                 r'Avg = (\d+)ms',
@@ -139,23 +166,13 @@ def ping_host():
                 match = re.search(pattern, response.stdout)
                 if match:
                     avg_ping = float(match.group(1))
-                    return {"status": "success", "time": avg_ping}
+                    if avg_ping > 0:  # S'assurer que la valeur n'est pas 0
+                        return {"status": "success", "time": avg_ping}
             
-            time_patterns = [
-                r'Time.*?=(\d+)ms',
-                r'time[=<](\d+)ms',
-                r'time=(\d+)ms',
-            ]
-            
-            for pattern in time_patterns:
-                matches = re.findall(pattern, response.stdout)
-                if matches:
-                    last_ping = float(matches[-1])
-                    return {"status": "success", "time": last_ping}
-            
-            return {"status": "success", "time": 0.0}
+            # Si aucune valeur n'est trouvée, retourner une erreur
+            return {"status": "error", "message": "No ping time found in output"}
         else:
-            return {"status": "failed", "error": "No response"}
+            return {"status": "failed", "error": "Ping command failed"}
             
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -783,6 +800,29 @@ def monitor_loop():
         update_data()
         time.sleep(CONFIG["check_interval"])
 
+def ping_monitor_loop():
+    global ping_history
+    while True:
+        ping_result = ping_host()
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Mettre à jour les données de ping dans latest_data
+        latest_data["ping_status"] = ping_result.get("status", "error")
+        latest_data["ping_value"] = ping_result.get("time", 0) if ping_result.get("status") == "success" else None
+        
+        # Ajouter à l'historique du ping
+        ping_history.append({
+            "ping": ping_result.get("time", 0),
+            "timestamp": timestamp
+        })
+        
+        # Limiter la taille de l'historique
+        if len(ping_history) > 20:
+            ping_history.pop(0)
+        
+        latest_data["ping_history"] = ping_history.copy()
+        time.sleep(ping_update_interval)
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -847,6 +887,11 @@ if __name__ == "__main__":
     monitor_thread = threading.Thread(target=monitor_loop)
     monitor_thread.daemon = True
     monitor_thread.start()
+    
+    # Start ping monitoring
+    ping_monitor_thread = threading.Thread(target=ping_monitor_loop)
+    ping_monitor_thread.daemon = True
+    ping_monitor_thread.start()
     
     # Open browser
     webbrowser.open(f'http://localhost:{CONFIG["web_port"]}')
