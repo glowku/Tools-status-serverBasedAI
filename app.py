@@ -8,7 +8,7 @@ from datetime import datetime
 import logging
 import os
 import sys
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request  # Ajout de request
 from flask_cors import CORS
 import threading
 import webbrowser
@@ -234,7 +234,7 @@ def get_security_info():
         if security_headers:
             return ", ".join(security_headers) + f" | {cert_info}"
         else:
-            return f"SSL headers | {cert_info}"
+            return f"No security headers | {cert_info}"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -769,6 +769,23 @@ def get_network():
 @app.route('/api/transactions')
 def get_transactions():
     return jsonify(latest_data.get("transactions", {}))
+
+@app.route('/api/update_interval', methods=['POST'])
+def update_interval():
+    global CONFIG
+    data = request.json
+    interval = data.get('interval', 60)
+    unit = data.get('unit', 'seconds')
+    
+    if unit == 'minutes':
+        interval = interval * 60
+    elif unit == 'hours':
+        interval = interval * 60 * 60
+    elif unit == 'days':
+        interval = interval * 60 * 60 * 24
+    
+    CONFIG["check_interval"] = interval
+    return jsonify({"success": True, "interval": CONFIG["check_interval"]})
 
 if __name__ == "__main__":
     # Initialize DNS serial
