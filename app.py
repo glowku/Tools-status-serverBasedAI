@@ -1093,7 +1093,6 @@ def update_data():
 
 
 
-
 def monitor_loop():
     while True:
         update_data()
@@ -1193,21 +1192,6 @@ def update_interval():
     
     CONFIG["check_interval"] = interval
     return jsonify({"success": True, "interval": CONFIG["check_interval"]})
-
-
-@app.route('/api/force_update', methods=['POST'])
-def force_update():
-    """Force une mise à jour immédiate des données"""
-    try:
-        # Exécuter la mise à jour des données dans un thread séparé pour ne pas bloquer la requête
-        update_thread = threading.Thread(target=update_data)
-        update_thread.daemon = True
-        update_thread.start()
-        
-        return jsonify({"success": True, "message": "Update initiated"})
-    except Exception as e:
-        logging.error(f"Error forcing update: {str(e)}")
-        return jsonify({"success": False, "message": str(e)})
 
 if __name__ == "__main__":
     # Configuration pour Render
