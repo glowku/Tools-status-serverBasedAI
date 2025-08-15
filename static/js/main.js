@@ -344,58 +344,106 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Variable to store update interval
-    let updateInterval;
-    let pingUpdateInterval;
-    let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
+// Variable to store update interval
+let updateInterval;
+let pingUpdateInterval;
+let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
+
+// Handle update interval
+document.getElementById('apply-interval').addEventListener('click', function() {
+    const unit = document.getElementById('interval-unit').value;
     
-    // Handle update interval
-    document.getElementById('apply-interval').addEventListener('click', function() {
-        const unit = document.getElementById('interval-unit').value;
-        
-        // Valeurs par défaut pour chaque unité
-        const defaultValues = {
-            'seconds': 2,    // 2 secondes
-            'minutes': 1,    // 1 minute
-            'hours': 1,      // 1 heure
-            'days': 1        // 1 jour
-        };
-        
-        const defaultValue = defaultValues[unit];
-        
-        // Calculer l'intervalle en millisecondes
-        let intervalMs;
-        if (unit === 'seconds') {
-            intervalMs = defaultValue * 1000;
-        } else if (unit === 'minutes') {
-            intervalMs = defaultValue * 60 * 1000;
-        } else if (unit === 'hours') {
-            intervalMs = defaultValue * 60 * 60 * 1000;
-        } else if (unit === 'days') {
-            intervalMs = defaultValue * 24 * 60 * 60 * 1000;
-        }
-        
-        // Mettre à jour l'intervalle de mise à jour du graphique
-        chartUpdateInterval = intervalMs;
-        
-        // Effacer l'intervalle existant et en créer un nouveau
-        if (pingUpdateInterval) {
-            clearInterval(pingUpdateInterval);
-        }
-        pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
-        
-        // Afficher un message de confirmation
-        const applyButton = document.getElementById('apply-interval');
-        const originalText = applyButton.textContent;
-        applyButton.textContent = 'Applied!';
-        applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
-        
-        setTimeout(() => {
-            applyButton.textContent = originalText;
-            applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
-        }, 2000);
-        
-        console.log("Chart update interval changed to:", intervalMs, "ms");
-    });
+    // Valeurs par défaut pour chaque unité
+    const defaultValues = {
+        'seconds': 2,    // 2 secondes
+        'minutes': 1,    // 1 minute
+        'hours': 1,      // 1 heure
+        'days': 1        // 1 jour
+    };
+    
+    const defaultValue = defaultValues[unit];
+    
+    // Calculer l'intervalle en millisecondes
+    let intervalMs;
+    if (unit === 'seconds') {
+        intervalMs = defaultValue * 1000;
+    } else if (unit === 'minutes') {
+        intervalMs = defaultValue * 60 * 1000;
+    } else if (unit === 'hours') {
+        intervalMs = defaultValue * 60 * 60 * 1000;
+    } else if (unit === 'days') {
+        intervalMs = defaultValue * 24 * 60 * 60 * 1000;
+    }
+    
+    // Mettre à jour l'intervalle de mise à jour du graphique
+    chartUpdateInterval = intervalMs;
+    
+    // Effacer l'intervalle existant et en créer un nouveau
+    if (pingUpdateInterval) {
+        clearInterval(pingUpdateInterval);
+    }
+    pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
+    
+    // Afficher un message de confirmation
+    const applyButton = document.getElementById('apply-interval');
+    const originalText = applyButton.textContent;
+    applyButton.textContent = 'Applied!';
+    applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
+    
+    setTimeout(() => {
+        applyButton.textContent = originalText;
+        applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
+    }, 2000);
+    
+    console.log("Chart update interval changed to:", intervalMs, "ms");
+    
+    // Forcer une mise à jour immédiate du graphique
+    updatePingChart();
+});
+
+// Modifier la fonction updatePingChart pour s'assurer qu'elle utilise le bon intervalle
+function updatePingChart() {
+    console.log("Updating ping chart with interval:", chartUpdateInterval, "ms");
+    
+    fetch('/api/data')
+        .then(response => response.json())
+        .then(data => {
+            // Mettre à jour les valeurs de ping en temps réel
+            if (data.ping_value !== null && data.ping_value !== undefined && data.ping_value > 0) {
+                document.getElementById('ping-metric').textContent = `${data.ping_value.toFixed(2)} ms`;
+            } else {
+                // Si pas de valeur valide, afficher "No data"
+                document.getElementById('ping-metric').textContent = 'No data';
+            }
+            
+            // Mettre à jour le statut
+            updateStatus('ping-status', data.ping_status);
+            
+            // Mettre à jour le graphique avec l'historique du ping
+            if (data.ping_history && data.ping_history.length > 0) {
+                const labels = data.ping_history.map(h => {
+                    const date = new Date(h.timestamp);
+                    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
+                });
+                
+                const pingData = data.ping_history.map(h => h.ping || 0);
+                
+                // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
+                const filteredPingData = pingData.map(value => value > 0 ? value : null);
+                
+                // Only update the ping dataset, keep RPC data as is
+                latencyChart.data.labels = labels;
+                latencyChart.data.datasets[0].data = filteredPingData;
+                
+                // Ajuster l'échelle du graphique
+                adjustChartScale();
+                
+                // Mettre à jour sans animation pour un rendu plus fluide
+                latencyChart.update('none');
+            }
+        })
+        .catch(error => console.error('Error updating ping chart:', error));
+}
     
     // Function to update a status
     function updateStatus(elementId, status) {

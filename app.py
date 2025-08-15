@@ -412,29 +412,56 @@ def get_dns_serial():
         return date_serial
     
     try:
-        # Méthode directe avec socket pour les environnements restreints
+        # Méthode 1: Utiliser une API DNS externe (Google DNS API)
         try:
-            import socket
-            import dns.resolver
+            import urllib.parse
+            domain = CONFIG["domain"]
+            url = f"https://dns.google/resolve?name={domain}&type=SOA"
             
-            # Essayer de résoudre directement
-            resolver = dns.resolver.Resolver()
-            # Utiliser des DNS publics
-            resolver.nameservers = ['1.1.1.1', '8.8.8.8']
-            
-            answers = resolver.resolve(CONFIG["domain"], 'SOA')
-            for rdata in answers:
-                if hasattr(rdata, 'serial'):
-                    serial = str(rdata.serial)
-                    logging.info(f"DNS serial found using direct resolver: {serial}")
-                    last_dns_serial = serial
-                    return serial
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if "Answer" in data:
+                    for answer in data["Answer"]:
+                        if answer["type"] == 6:  # SOA record type
+                            # Parser la réponse SOA pour extraire le serial
+                            soa_data = answer["data"].split()
+                            if len(soa_data) >= 7:
+                                serial = soa_data[6]
+                                if serial.isdigit():
+                                    logging.info(f"DNS serial found using Google DNS API: {serial}")
+                                    last_dns_serial = serial
+                                    return serial
         except Exception as e:
-            logging.error(f"Error with direct DNS resolver: {str(e)}")
+            logging.error(f"Error with Google DNS API: {str(e)}")
         
-        # Méthode alternative avec subprocess
+        # Méthode 2: Utiliser l'API Cloudflare DNS
         try:
-            # Essayer avec dig si disponible
+            domain = CONFIG["domain"]
+            url = f"https://cloudflare-dns.com/dns-query?name={domain}&type=SOA"
+            
+            headers = {
+                "Accept": "application/dns-json"
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if "Answer" in data:
+                    for answer in data["Answer"]:
+                        if answer["type"] == 6:  # SOA record type
+                            soa_data = answer["data"].split()
+                            if len(soa_data) >= 7:
+                                serial = soa_data[6]
+                                if serial.isdigit():
+                                    logging.info(f"DNS serial found using Cloudflare DNS API: {serial}")
+                                    last_dns_serial = serial
+                                    return serial
+        except Exception as e:
+            logging.error(f"Error with Cloudflare DNS API: {str(e)}")
+        
+        # Méthode 3: Essayer avec dig si disponible
+        try:
             command = ['dig', '+short', 'SOA', CONFIG["domain"]]
             response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
@@ -454,36 +481,22 @@ def get_dns_serial():
             logging.error(f"Error with dig: {str(e)}")
         
         # Dernière tentative avec nslookup
-        command = ['nslookup', '-type=SOA', CONFIG["domain"]]
-        response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        
-        if response.returncode == 0:
-            # Chercher spécifiquement le format "serial = 2025081401"
-            serial_pattern = r'serial\s*=\s*(\d{10})'
-            match = re.search(serial_pattern, response.stdout)
-            if match:
-                serial = match.group(1)
-                logging.info(f"DNS serial found (10 digits format): {serial}")
-                last_dns_serial = serial
-                return serial
+        try:
+            command = ['nslookup', '-type=SOA', CONFIG["domain"]]
+            response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
-            # Autres patterns
-            patterns = [
-                r'serial\s*=\s*(\d+)',
-                r'serial\s*(\d+)',
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, response.stdout)
+            if response.returncode == 0:
+                # Chercher spécifiquement le format "serial = 2025081401"
+                serial_pattern = r'serial\s*=\s*(\d{10})'
+                match = re.search(serial_pattern, response.stdout)
                 if match:
                     serial = match.group(1)
-                    logging.info(f"DNS serial found: {serial}")
+                    logging.info(f"DNS serial found (10 digits format): {serial}")
                     last_dns_serial = serial
                     return serial
+        except Exception as e:
+            logging.error(f"Error with nslookup: {str(e)}")
             
-            logging.error("DNS serial not found in nslookup output")
-        else:
-            logging.error(f"nslookup command failed: {response.stderr}")
     except Exception as e:
         logging.error(f"Error executing DNS commands: {str(e)}")
     
@@ -493,6 +506,8 @@ def get_dns_serial():
     logging.warning(f"All DNS methods failed, using date-based serial: {date_serial}")
     last_dns_serial = date_serial
     return date_serial
+
+
 def get_txt_records():
     # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
     if CONFIG["disable_dns_checks"]:
