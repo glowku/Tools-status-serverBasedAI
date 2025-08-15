@@ -432,7 +432,7 @@ document.getElementById('apply-interval').addEventListener('click', function() {
 
 // Modifier la fonction updatePingChart pour s'ass
 
-// Modifier la fonction updatePingChart pour s'assurer qu'elle utilise le bon intervalle
+// Modifier la fonction updatePingChart pour s'assurer que le graphique se redessine correctement
 function updatePingChart() {
     console.log("Updating ping chart with interval:", chartUpdateInterval, "ms");
     
@@ -462,18 +462,62 @@ function updatePingChart() {
                 // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
                 const filteredPingData = pingData.map(value => value > 0 ? value : null);
                 
-                // Only update the ping dataset, keep RPC data as is
+                // Mettre à jour les données du graphique
                 latencyChart.data.labels = labels;
                 latencyChart.data.datasets[0].data = filteredPingData;
                 
                 // Ajuster l'échelle du graphique
                 adjustChartScale();
                 
-                // Mettre à jour sans animation pour un rendu plus fluide
-                latencyChart.update('none');
+                // Forcer un redessin complet du graphique
+                latencyChart.update('active'); // Utiliser 'active' pour forcer une animation complète
+                
+                // Redimensionner le conteneur du graphique si nécessaire
+                const chartContainer = document.getElementById('latency-chart').parentElement;
+                if (chartContainer) {
+                    chartContainer.style.height = '100%';
+                    latencyChart.resize();
+                }
             }
         })
         .catch(error => console.error('Error updating ping chart:', error));
+}
+
+// Modifier la fonction adjustChartScale pour mieux gérer les changements d'échelle
+function adjustChartScale() {
+    // Récupérer toutes les valeurs de ping valides
+    const pingValues = latencyChart.data.datasets[0].data.filter(v => v !== null && v > 0);
+    const rpcValues = latencyChart.data.datasets[1].data.filter(v => v !== null && v > 0);
+    const allValues = [...pingValues, ...rpcValues];
+    
+    if (allValues.length === 0) {
+        // Si aucune valeur valide, définir une échelle par défaut
+        latencyChart.options.scales.y.min = 0;
+        latencyChart.options.scales.y.max = 200;
+        return;
+    }
+    
+    // Calculer min et max avec une marge
+    const minValue = Math.min(...allValues);
+    const maxValue = Math.max(...allValues);
+    
+    // Ajouter une marge de 20% pour une meilleure visualisation
+    const margin = (maxValue - minValue) * 0.2;
+    const adjustedMin = Math.max(0, minValue - margin);
+    const adjustedMax = maxValue + margin;
+    
+    // S'assurer que l'échelle minimale est au moins de 100ms pour les valeurs normales
+    const finalMin = Math.min(adjustedMin, 50);
+    const finalMax = Math.max(adjustedMax, 200);
+    
+    // Appliquer la nouvelle échelle
+    latencyChart.options.scales.y.min = finalMin;
+    latencyChart.options.scales.y.max = finalMax;
+    
+    // Forcer la mise à jour de l'échelle
+    latencyChart.options.scales.y.ticks.callback = function(value) {
+        return value + ' ms';
+    };
 }
     
     // Function to update a status
@@ -760,143 +804,191 @@ function updatePingChart() {
             .catch(error => console.error('Error updating ping chart:', error));
     }
     
-    // Modifier la fonction updateData() pour inclure la mise à jour des alertes
-    function updateData() {
-        console.log("Updating data...");
-        document.getElementById('sync-status').textContent = 'Synchronizing...';
-        
-        fetch('/api/data')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log("Data received:", data);
-                
-                // Update server status
-                const serverStatusElement = document.getElementById('server-status');
-                const serverStatusText = document.getElementById('server-status-text');
-                
-                if (data.server_status === 'online') {
-                    serverStatusElement.className = 'server-status online';
-                    serverStatusText.textContent = 'Server Online';
+// Modifier la fonction updateData pour forcer une mise à jour complète
+function updateData() {
+    console.log("Updating data...");
+    document.getElementById('sync-status').textContent = 'Synchronizing...';
+    
+    // Ajouter un timestamp pour éviter la mise en cache
+    const timestamp = new Date().getTime();
+    
+    fetch(`/api/data?_=${timestamp}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("Data received:", data);
+            
+            // Vérifier si les données sont récentes (moins de 5 secondes)
+            const lastCheckTime = new Date(data.last_check).getTime();
+            const currentTime = new Date().getTime();
+            const dataAge = currentTime - lastCheckTime;
+            
+            console.log(`Data age: ${dataAge}ms`);
+            
+            // Si les données sont trop anciennes (plus de 30 secondes), forcer une nouvelle mise à jour
+            if (dataAge > 30000) {
+                console.log("Data is too old, forcing refresh...");
+                setTimeout(updateData, 1000);
+                return;
+            }
+            
+            // Update server status
+            const serverStatusElement = document.getElementById('server-status');
+            const serverStatusText = document.getElementById('server-status-text');
+            
+            if (data.server_status === 'online') {
+                serverStatusElement.className = 'server-status online';
+                serverStatusText.textContent = 'Server Online';
+            } else {
+                serverStatusElement.className = 'server-status offline';
+                serverStatusText.textContent = 'Server Offline';
+            }
+            
+            // Update main statuses
+            updateStatus('rpc-status', data.rpc_status);
+            updateStatus('ping-status', data.ping_status);
+            
+            // Update metrics - ensure we show actual values, not 0
+            if (data.rpc_value !== null && data.rpc_value !== undefined) {
+                // Convert from seconds to milliseconds if needed
+                const rpcMs = data.rpc_value < 1 ? data.rpc_value * 1000 : data.rpc_value;
+                document.getElementById('rpc-metric').textContent = `${rpcMs.toFixed(2)} ms`;
+            } else {
+                document.getElementById('rpc-metric').textContent = '-- ms';
+            }
+            
+            // Gérer spécifiquement les valeurs de ping
+            if (data.ping_value !== null && data.ping_value !== undefined && data.ping_value > 0) {
+                document.getElementById('ping-metric').textContent = `${data.ping_value.toFixed(2)} ms`;
+            } else {
+                document.getElementById('ping-metric').textContent = 'No data';
+            }
+            
+            document.getElementById('dns-version').textContent = data.version_info || 'N/A';
+            
+            // Update detailed information
+            document.getElementById('ip-subdomain').textContent = data.ip_info || 'N/A';
+            document.getElementById('ip-domain').textContent = data.main_domain_info?.ip || 'N/A';
+            document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
+            document.getElementById('security').textContent = data.security_info || 'N/A';
+            document.getElementById('last-check').textContent = data.last_check;
+            
+            // Update TXT Records
+            const txtContainer = document.getElementById('txt-records');
+            if (Array.isArray(data.txt_info) && data.txt_info.length > 0) {
+                txtContainer.innerHTML = '';
+                data.txt_info.forEach(record => {
+                    const recordElement = document.createElement('div');
+                    recordElement.className = 'txt-record';
+                    recordElement.textContent = record;
+                    txtContainer.appendChild(recordElement);
+                });
+            } else {
+                txtContainer.textContent = 'N/A';
+            }
+            
+            // Update SSL information
+            if (data.ssl_info) {
+                document.getElementById('ssl-issuer').textContent = 
+                    data.ssl_info.issuer ? data.ssl_info.issuer.organizationName || 'N/A' : 'N/A';
+                document.getElementById('ssl-subject').textContent = 
+                    data.ssl_info.subject ? data.ssl_info.subject.commonName || 'N/A' : 'N/A';
+                document.getElementById('ssl-expiry').textContent = 
+                    data.ssl_info.notAfter || 'N/A';
+                document.getElementById('ssl-days-left').textContent = 
+                    data.ssl_info.days_left !== undefined ? `${data.ssl_info.days_left} days` : 'N/A';
+            }
+            
+            // Update transaction information
+            if (data.transactions) {
+                if (data.transactions.error) {
+                    document.getElementById('latest-block').textContent = 'Error';
+                    document.getElementById('tx-count').textContent = 'Error';
+                    document.getElementById('tx-source').textContent = data.transactions.error;
                 } else {
-                    serverStatusElement.className = 'server-status offline';
-                    serverStatusText.textContent = 'Server Offline';
+                    document.getElementById('latest-block').textContent = 
+                        data.transactions.block_number ? `#${data.transactions.block_number}` : 'N/A';
+                    document.getElementById('tx-count').textContent = 
+                        data.transactions.tx_count || 'N/A';
+                    document.getElementById('tx-source').textContent = 
+                        data.transactions.source || 'N/A';
                 }
+            }
+            
+            // Update ports
+            updatePorts(data.port_statuses);
+            
+            // Update alerts
+            updateAlerts(data.alerts);
+            
+            // Mettre à jour le graphique avec les données de ping filtrées
+            if (data.ping_history && data.ping_history.length > 0) {
+                const labels = data.ping_history.map(h => {
+                    const date = new Date(h.timestamp);
+                    return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+                });
                 
-                // Update main statuses
-                updateStatus('rpc-status', data.rpc_status);
-                updateStatus('ping-status', data.ping_status);
-                
-                // Update metrics - ensure we show actual values, not 0
-                if (data.rpc_value !== null && data.rpc_value !== undefined) {
+                const pingData = data.ping_history.map(h => h.ping || 0);
+                const rpcData = data.ping_history.map(h => {
                     // Convert from seconds to milliseconds if needed
-                    const rpcMs = data.rpc_value < 1 ? data.rpc_value * 1000 : data.rpc_value;
-                    document.getElementById('rpc-metric').textContent = `${rpcMs.toFixed(2)} ms`;
-                } else {
-                    document.getElementById('rpc-metric').textContent = '-- ms';
-                }
+                    return (h.rpc || 0) < 1 ? (h.rpc || 0) * 1000 : (h.rpc || 0);
+                });
                 
-                // Gérer spécifiquement les valeurs de ping
-                if (data.ping_value !== null && data.ping_value !== undefined && data.ping_value > 0) {
-                    document.getElementById('ping-metric').textContent = `${data.ping_value.toFixed(2)} ms`;
-                } else {
-                    document.getElementById('ping-metric').textContent = 'No data';
-                }
+                // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
+                const filteredPingData = pingData.map(value => value > 0 ? value : null);
                 
-                document.getElementById('dns-version').textContent = data.version_info || 'N/A';
+                latencyChart.data.labels = labels;
+                latencyChart.data.datasets[0].data = filteredPingData;
+                latencyChart.data.datasets[1].data = rpcData;
                 
-                // Update detailed information
-                document.getElementById('ip-subdomain').textContent = data.ip_info || 'N/A';
-                document.getElementById('ip-domain').textContent = data.main_domain_info?.ip || 'N/A';
-                document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
-                document.getElementById('security').textContent = data.security_info || 'N/A';
-                document.getElementById('last-check').textContent = data.last_check;
+                // Ajuster l'échelle du graphique
+                adjustChartScale();
                 
-                // Update TXT Records
-                const txtContainer = document.getElementById('txt-records');
-                if (Array.isArray(data.txt_info) && data.txt_info.length > 0) {
-                    txtContainer.innerHTML = '';
-                    data.txt_info.forEach(record => {
-                        const recordElement = document.createElement('div');
-                        recordElement.className = 'txt-record';
-                        recordElement.textContent = record;
-                        txtContainer.appendChild(recordElement);
-                    });
-                } else {
-                    txtContainer.textContent = 'N/A';
-                }
-                
-                // Update SSL information
-                if (data.ssl_info) {
-                    document.getElementById('ssl-issuer').textContent = 
-                        data.ssl_info.issuer ? data.ssl_info.issuer.organizationName || 'N/A' : 'N/A';
-                    document.getElementById('ssl-subject').textContent = 
-                        data.ssl_info.subject ? data.ssl_info.subject.commonName || 'N/A' : 'N/A';
-                    document.getElementById('ssl-expiry').textContent = 
-                        data.ssl_info.notAfter || 'N/A';
-                    document.getElementById('ssl-days-left').textContent = 
-                        data.ssl_info.days_left !== undefined ? `${data.ssl_info.days_left} days` : 'N/A';
-                }
-                
-                // Update transaction information
-                if (data.transactions) {
-                    if (data.transactions.error) {
-                        document.getElementById('latest-block').textContent = 'Error';
-                        document.getElementById('tx-count').textContent = 'Error';
-                        document.getElementById('tx-source').textContent = data.transactions.error;
-                    } else {
-                        document.getElementById('latest-block').textContent = 
-                            data.transactions.block_number ? `#${data.transactions.block_number}` : 'N/A';
-                        document.getElementById('tx-count').textContent = 
-                            data.transactions.tx_count || 'N/A';
-                        document.getElementById('tx-source').textContent = 
-                            data.transactions.source || 'N/A';
-                    }
-                }
-                
-                // Update ports
-                updatePorts(data.port_statuses);
-                
-                // Update alerts
-                updateAlerts(data.alerts);
-                
-                // Mettre à jour le graphique avec les données de ping filtrées
-                if (data.ping_history && data.ping_history.length > 0) {
-                    const labels = data.ping_history.map(h => {
-                        const date = new Date(h.timestamp);
-                        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-                    });
-                    
-                    const pingData = data.ping_history.map(h => h.ping || 0);
-                    const rpcData = data.ping_history.map(h => {
-                        // Convert from seconds to milliseconds if needed
-                        return (h.rpc || 0) < 1 ? (h.rpc || 0) * 1000 : (h.rpc || 0);
-                    });
-                    
-                    // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
-                    const filteredPingData = pingData.map(value => value > 0 ? value : null);
-                    
-                    latencyChart.data.labels = labels;
-                    latencyChart.data.datasets[0].data = filteredPingData;
-                    latencyChart.data.datasets[1].data = rpcData;
-                    
-                    // Ajuster l'échelle du graphique
-                    adjustChartScale();
-                    
-                    latencyChart.update();
-                }
-                
-                document.getElementById('sync-status').textContent = 'Synchronised';
-            })
-            .catch(error => {
-                console.error('Error fetching data:', error);
-                document.getElementById('sync-status').textContent = 'Sync Error';
-            });
-    }
+                // Forcer un redessin complet du graphique
+                latencyChart.update('active');
+            }
+            
+            document.getElementById('sync-status').textContent = 'Synchronised';
+        })
+        .catch(error => {
+            console.error('Error fetching data:', error);
+            document.getElementById('sync-status').textContent = 'Sync Error';
+            
+            // En cas d'erreur, réessayer après 5 secondes
+            setTimeout(updateData, 5000);
+        });
+}
+
+
+// Fonction pour forcer la mise à jour des données sur le serveur
+function forceServerUpdate() {
+    console.log("Forcing server data update...");
+    
+    fetch('/api/force_update', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log("Server update forced successfully");
+            // Mettre à jour les données locales après la mise à jour du serveur
+            updateData();
+        }
+    })
+    .catch(error => {
+        console.error('Error forcing server update:', error);
+    });
+}
+
+// Appeler cette fonction périodiquement pour s'assurer que le serveur met à jour les données
+setInterval(forceServerUpdate, 300000); // Toutes les 5 minutes
     
     // Initial update
     updateData();
