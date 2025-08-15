@@ -412,90 +412,95 @@ def get_dns_serial():
         return date_serial
     
     try:
-        # Méthode 1: Utiliser une API DNS externe (Google DNS API)
+        # Méthode 1: Utiliser une API DNS externe plus fiable
         try:
-            import urllib.parse
-            domain = CONFIG["domain"]
-            url = f"https://dns.google/resolve?name={domain}&type=SOA"
-            
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if "Answer" in data:
-                    for answer in data["Answer"]:
-                        if answer["type"] == 6:  # SOA record type
-                            # Parser la réponse SOA pour extraire le serial
-                            soa_data = answer["data"].split()
-                            if len(soa_data) >= 7:
-                                serial = soa_data[6]
-                                if serial.isdigit():
-                                    logging.info(f"DNS serial found using Google DNS API: {serial}")
-                                    last_dns_serial = serial
-                                    return serial
-        except Exception as e:
-            logging.error(f"Error with Google DNS API: {str(e)}")
-        
-        # Méthode 2: Utiliser l'API Cloudflare DNS
-        try:
-            domain = CONFIG["domain"]
-            url = f"https://cloudflare-dns.com/dns-query?name={domain}&type=SOA"
+            # Utiliser l'API de Whois
+            domain = CONFIG["main_domain"]  # Utiliser le domaine principal au lieu du sous-domaine
+            url = f"https://www.whois.com/whois/{domain}"
             
             headers = {
-                "Accept": "application/dns-json"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                # Chercher le serial dans la réponse
+                serial_patterns = [
+                    r'Registry Expiry Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
+                    r'Expiration Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
+                    r'paid-till:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
+                    r'expires:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})'
+                ]
+                
+                for pattern in serial_patterns:
+                    match = re.search(pattern, response.text, re.IGNORECASE)
+                    if match:
+                        date_str = match.group(1)
+                        # Convertir la date en format YYYYMMDD
+                        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                        serial = date_obj.strftime("%Y%m%d")
+                        logging.info(f"DNS serial found using Whois API: {serial}")
+                        last_dns_serial = serial
+                        return serial
+        except Exception as e:
+            logging.error(f"Error with Whois API: {str(e)}")
+        
+        # Méthode 2: Utiliser l'API JSON Whois
+        try:
+            domain = CONFIG["main_domain"]
+            url = f"https://jsonwhoisapi.com/api/v1/whois?domainName={domain}"
+            
+            headers = {
+                "Authorization": "Bearer demo",  # Clé de démonstration
+                "Content-Type": "application/json"
             }
             
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                if "Answer" in data:
-                    for answer in data["Answer"]:
-                        if answer["type"] == 6:  # SOA record type
-                            soa_data = answer["data"].split()
-                            if len(soa_data) >= 7:
-                                serial = soa_data[6]
-                                if serial.isdigit():
-                                    logging.info(f"DNS serial found using Cloudflare DNS API: {serial}")
-                                    last_dns_serial = serial
-                                    return serial
+                if "WhoisRecord" in data and "registryData" in data["WhoisRecord"]:
+                    registry_data = data["WhoisRecord"]["registryData"]
+                    
+                    # Chercher la date d'expiration
+                    if "expirationDate" in registry_data:
+                        exp_date = registry_data["expirationDate"]
+                        if exp_date:
+                            # Formater la date
+                            date_obj = datetime.strptime(exp_date.split("T")[0], "%Y-%m-%d")
+                            serial = date_obj.strftime("%Y%m%d")
+                            logging.info(f"DNS serial found using JSON Whois API: {serial}")
+                            last_dns_serial = serial
+                            return serial
         except Exception as e:
-            logging.error(f"Error with Cloudflare DNS API: {str(e)}")
+            logging.error(f"Error with JSON Whois API: {str(e)}")
         
-        # Méthode 3: Essayer avec dig si disponible
+        # Méthode 3: Utiliser une requête directe au whois
         try:
-            command = ['dig', '+short', 'SOA', CONFIG["domain"]]
+            domain = CONFIG["main_domain"]
+            command = ['whois', domain]
             response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
             if response.returncode == 0:
-                # Extraire le serial de la réponse dig
-                lines = response.stdout.strip().split('\n')
-                for line in lines:
-                    if line.strip():
-                        parts = line.split()
-                        if len(parts) >= 7:
-                            serial = parts[6]
-                            if serial.isdigit():
-                                logging.info(f"DNS serial found using dig: {serial}")
-                                last_dns_serial = serial
-                                return serial
+                # Chercher le serial dans la réponse
+                serial_patterns = [
+                    r'Registry Expiry Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
+                    r'Expiration Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
+                    r'paid-till:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
+                    r'expires:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})'
+                ]
+                
+                for pattern in serial_patterns:
+                    match = re.search(pattern, response.stdout, re.IGNORECASE)
+                    if match:
+                        date_str = match.group(1)
+                        # Convertir la date en format YYYYMMDD
+                        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+                        serial = date_obj.strftime("%Y%m%d")
+                        logging.info(f"DNS serial found using whois command: {serial}")
+                        last_dns_serial = serial
+                        return serial
         except Exception as e:
-            logging.error(f"Error with dig: {str(e)}")
-        
-        # Dernière tentative avec nslookup
-        try:
-            command = ['nslookup', '-type=SOA', CONFIG["domain"]]
-            response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            
-            if response.returncode == 0:
-                # Chercher spécifiquement le format "serial = 2025081401"
-                serial_pattern = r'serial\s*=\s*(\d{10})'
-                match = re.search(serial_pattern, response.stdout)
-                if match:
-                    serial = match.group(1)
-                    logging.info(f"DNS serial found (10 digits format): {serial}")
-                    last_dns_serial = serial
-                    return serial
-        except Exception as e:
-            logging.error(f"Error with nslookup: {str(e)}")
+            logging.error(f"Error with whois command: {str(e)}")
             
     except Exception as e:
         logging.error(f"Error executing DNS commands: {str(e)}")
@@ -506,8 +511,6 @@ def get_dns_serial():
     logging.warning(f"All DNS methods failed, using date-based serial: {date_serial}")
     last_dns_serial = date_serial
     return date_serial
-
-
 def get_txt_records():
     # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
     if CONFIG["disable_dns_checks"]:
