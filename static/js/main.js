@@ -347,6 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let updateInterval;
     let pingUpdateInterval;
     let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
+    let timeUpdateInterval; // Pour la mise à jour de l'heure toutes les minutes
     
     // Handle update interval - CORRIGÉ
     document.getElementById('apply-interval').addEventListener('click', function() {
@@ -452,6 +453,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Fonction pour mettre à jour les alertes
     function updateAlerts(alerts) {
         const container = document.getElementById('alerts-container');
+        const currentAlertCount = container.querySelectorAll('.alert-item').length;
+        
         container.innerHTML = '';
         
         if (alerts.length === 0) {
@@ -470,6 +473,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const alertElement = document.createElement('div');
             alertElement.className = `alert-item ${alert.severity}`;
             alertElement.dataset.index = index;
+            
+            // Ajouter la classe 'new' aux alertes qui viennent d'apparaître
+            if (index >= currentAlertCount) {
+                alertElement.classList.add('new');
+            }
             
             let iconClass = 'info';
             if (alert.severity === 'warning') iconClass = 'warning';
@@ -512,6 +520,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Démarrer le compte à rebours pour les alertes
         startAlertTimers();
+        
+        // Vérifier si de nouvelles alertes critiques sont présentes
+        const criticalAlerts = alerts.filter(alert => alert.severity === 'critical');
+        if (criticalAlerts.length > 0) {
+            console.warn(`${criticalAlerts.length} critical alerts detected`);
+        }
     }
     
     // Fonction pour supprimer une alerte individuelle
@@ -658,8 +672,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // Fonction pour formater les étiquettes du graphique en fonction de l'unité sélectionnée
-    function formatChartLabel(dateString, unit) {
+    // Fonction pour formater les étiquettes du graphique en fonction de l'unité sélectionnée - AMÉLIORÉE
+    function formatChartLabel(dateString, unit, index, totalLabels) {
         if (!dateString) return 'N/A';
         
         try {
@@ -697,6 +711,39 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Fonction pour mettre à jour l'heure actuelle - CORRIGÉE
+    function updateCurrentTime() {
+        const now = new Date();
+        
+        // Obtenir l'heure UTC
+        const utcYear = now.getUTCFullYear();
+        const utcMonth = String(now.getUTCMonth() + 1).padStart(2, '0');
+        const utcDay = String(now.getUTCDate()).padStart(2, '0');
+        const utcHours = String(now.getUTCHours()).padStart(2, '0');
+        const utcMinutes = String(now.getUTCMinutes()).padStart(2, '0');
+        const utcSeconds = String(now.getUTCSeconds()).padStart(2, '0');
+        
+        // Obtenir l'heure locale
+        const localYear = now.getFullYear();
+        const localMonth = String(now.getMonth() + 1).padStart(2, '0');
+        const localDay = String(now.getDate()).padStart(2, '0');
+        const localHours = String(now.getHours()).padStart(2, '0');
+        const localMinutes = String(now.getMinutes()).padStart(2, '0');
+        const localSeconds = String(now.getSeconds()).padStart(2, '0');
+        
+        // Afficher les deux heures
+        const utcTimeString = `${utcYear}-${utcMonth}-${utcDay} ${utcHours}:${utcMinutes}:${utcSeconds} UTC`;
+        const localTimeString = `${localYear}-${localMonth}-${localDay} ${localHours}:${localMinutes}:${localSeconds}`;
+        
+        // Mettre à jour l'élément avec les deux heures
+        document.getElementById('last-check').innerHTML = `
+            <div class="time-display">
+                <div class="utc-time">${utcTimeString}</div>
+                <div class="local-time">${localTimeString}</div>
+            </div>
+        `;
+    }
+    
     // Function to update ping chart in real-time - CORRIGÉE
     function updatePingChart() {
         console.log("Updating ping chart with interval:", chartUpdateInterval, "ms");
@@ -720,8 +767,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Récupérer l'unité sélectionnée
                     const selectedUnit = document.getElementById('interval-unit').value;
                     
-                    const labels = data.ping_history.map(h => {
-                        return formatChartLabel(h.timestamp, selectedUnit);
+                    const labels = data.ping_history.map((h, index) => {
+                        return formatChartLabel(h.timestamp, selectedUnit, index, data.ping_history.length);
                     });
                     
                     const pingData = data.ping_history.map(h => h.ping || 0);
@@ -818,8 +865,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
                 document.getElementById('security').textContent = data.security_info || 'N/A';
                 
-                // Update last check with local time format - CORRIGÉ
-                document.getElementById('last-check').textContent = formatLocalDate(data.last_check);
+                // Update last check with both UTC and local time - CORRIGÉ
+                updateCurrentTime();
                 
                 // Update TXT Records
                 const txtContainer = document.getElementById('txt-records');
@@ -874,8 +921,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Récupérer l'unité sélectionnée
                     const selectedUnit = document.getElementById('interval-unit').value;
                     
-                    const labels = data.history.map(h => {
-                        return formatChartLabel(h.timestamp, selectedUnit);
+                    const labels = data.history.map((h, index) => {
+                        return formatChartLabel(h.timestamp, selectedUnit, index, data.history.length);
                     });
                     
                     const pingData = data.history.map(h => h.ping || 0);
@@ -914,4 +961,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Set ping update interval (2 seconds)
     pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
+    
+    // Mettre à jour l'heure actuelle toutes les minutes
+    timeUpdateInterval = setInterval(updateCurrentTime, 30000); // 60000ms = 1 minute
+    
+    // Mettre à jour l'heure immédiatement au démarrage
+    updateCurrentTime();
 });
