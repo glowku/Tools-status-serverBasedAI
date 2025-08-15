@@ -404,6 +404,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Forcer un redessin complet du graphique après un court délai
         setTimeout(() => {
             if (latencyChart) {
+                // Méthode plus radicale pour forcer la mise à jour
+                latencyChart.data.labels = latencyChart.data.labels.slice();
+                latencyChart.data.datasets[0].data = latencyChart.data.datasets[0].data.slice();
+                latencyChart.data.datasets[1].data = latencyChart.data.datasets[1].data.slice();
                 latencyChart.update('active');
                 console.log("Chart forcefully redrawn");
             }
@@ -639,10 +643,15 @@ document.addEventListener('DOMContentLoaded', function() {
             // Vérifier si la date est valide
             if (isNaN(date.getTime())) return 'N/A';
             
-            // Utiliser toISOString pour obtenir l'UTC correct
-            const isoString = date.toISOString();
-            // Formater comme "YYYY-MM-DD HH:MM:SS UTC"
-            return isoString.replace('T', ' ').substring(0, 19) + ' UTC';
+            // Récupérer les composants UTC directement
+            const year = date.getUTCFullYear();
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            const hours = String(date.getUTCHours()).padStart(2, '0');
+            const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+            
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} UTC`;
         } catch (e) {
             console.error('Error formatting date:', e);
             return dateString;
@@ -672,9 +681,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     const labels = data.ping_history.map(h => {
                         const date = new Date(h.timestamp);
                         // Formater en UTC correctement
-                        const isoString = date.toISOString();
-                        const timePart = isoString.split('T')[1].substring(0, 8);
-                        return `${timePart} UTC`;
+                        const hours = String(date.getUTCHours()).padStart(2, '0');
+                        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                        const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+                        return `${hours}:${minutes}:${seconds} UTC`;
                     });
                     
                     const pingData = data.ping_history.map(h => h.ping || 0);
@@ -827,9 +837,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     const labels = data.history.map(h => {
                         const date = new Date(h.timestamp);
                         // Formater en UTC correctement
-                        const isoString = date.toISOString();
-                        const timePart = isoString.split('T')[1].substring(0, 8);
-                        return `${timePart} UTC`;
+                        const hours = String(date.getUTCHours()).padStart(2, '0');
+                        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                        const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+                        return `${hours}:${minutes}:${seconds} UTC`;
                     });
                     
                     const pingData = data.history.map(h => h.ping || 0);
