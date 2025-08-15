@@ -1,121 +1,126 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
-    <!-- Gradient principal premium -->
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#5c6bc0;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#3949ab;stop-opacity:1" />
+    <!-- Gradient cyan vibrant -->
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00e5ff;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#00acc1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0097a7;stop-opacity:1" />
     </linearGradient>
     
-    <!-- Gradient pour l'effet de scanning -->
-    <radialGradient id="scanGrad">
-      <stop offset="0%" style="stop-color:#4caf50;stop-opacity:0.8" />
-      <stop offset="100%" style="stop-color:#4caf50;stop-opacity:0" />
-    </radialGradient>
-    
-    <!-- Gradient pour le verre -->
-    <radialGradient id="glassGrad">
-      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.3" />
-      <stop offset="100%" style="stop-color:#e8eaf6;stop-opacity:0.1" />
+    <!-- Gradient vert néon pour le scanning -->
+    <radialGradient id="neonGreen">
+      <stop offset="0%" style="stop-color:#00ff88;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00cc66;stop-opacity:0.3" />
     </radialGradient>
   </defs>
   
-  <!-- Fond minimaliste -->
-  <rect width="100" height="100" fill="#f5f7fa"/>
-  
-  <!-- Ondes subtiles -->
-  <g transform="translate(50, 50)" opacity="0.3">
-    <circle r="35" fill="none" stroke="#c5cae9" stroke-width="1">
-      <animate attributeName="r" values="35;38;35" dur="4s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="0.3;0.05;0.3" dur="4s" repeatCount="indefinite"/>
+  <!-- Ondes d'impact cyan avec animations plus visibles -->
+  <g transform="translate(50, 50)">
+    <circle r="40" fill="none" stroke="#00e5ff" stroke-width="1.5" opacity="0.8">
+      <animate attributeName="r" values="40;50;40" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;0.1;0.8" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="35" fill="none" stroke="#00acc1" stroke-width="1" opacity="0.6">
+      <animate attributeName="r" values="35;45;35" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.6;0.05;0.6" dur="1.8s" repeatCount="indefinite"/>
     </circle>
   </g>
   
-  <!-- Loupe moderne -->
+  <!-- Loupe cyan -->
   <g transform="translate(50, 50)">
     <!-- Corps principal -->
     <g>
-      <!-- Cercle extérieur avec effet de verre -->
-      <circle cx="-8" cy="-8" r="18" fill="url(#glassGrad)" stroke="url(#grad1)" stroke-width="2"/>
+      <!-- Cercle extérieur -->
+      <circle cx="-8" cy="-8" r="20" fill="none" stroke="url(#cyanGrad)" stroke-width="3"/>
       
-      <!-- Poignée intégrée -->
-      <path d="M 7 7 Q 10 10, 13 13 T 20 20" 
+      <!-- Poignée -->
+      <path d="M 8 8 Q 12 12, 16 16 T 25 25" 
             fill="none" 
-            stroke="url(#grad1)" 
-            stroke-width="3.5" 
+            stroke="url(#cyanGrad)" 
+            stroke-width="5" 
             stroke-linecap="round"/>
+    </g>
+    
+    <!-- Intérieur avec effet de verre -->
+    <circle cx="-8" cy="-8" r="17" fill="#00e5ff" opacity="0.1"/>
+    
+    <!-- Reflet -->
+    <ellipse cx="-12" cy="-12" rx="6" ry="9" fill="#ffffff" opacity="0.7" transform="rotate(-45)"/>
+    
+    <!-- Effet de scanning vert avec animations plus visibles -->
+    <g>
+      <!-- Anneaux de scanning avec plus de mouvement -->
+      <circle cx="-8" cy="-8" r="6" fill="none" stroke="#00ff88" stroke-width="2">
+        <animate attributeName="r" values="6;18;6" dur="1s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;0.1;1" dur="1s" repeatCount="indefinite"/>
+        <animate attributeName="stroke-width" values="2;0.5;2" dur="1s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="-8" cy="-8" r="10" fill="none" stroke="#00ff88" stroke-width="1.5">
+        <animate attributeName="r" values="10;20;10" dur="1s" repeatCount="indefinite" begin="0.3s"/>
+        <animate attributeName="opacity" values="0.8;0.05;0.8" dur="1s" repeatCount="indefinite" begin="0.3s"/>
+        <animate attributeName="stroke-width" values="1.5;0.3;1.5" dur="1s" repeatCount="indefinite" begin="0.3s"/>
+      </circle>
       
-      <!-- Reflet premium -->
-      <ellipse cx="-12" cy="-12" rx="5" ry="7" fill="#ffffff" opacity="0.5" transform="rotate(-45)"/>
-    </g>
-    
-    <!-- Effet de scanning créatif : cercles concentriques animés -->
-    <g opacity="0.6">
-      <circle cx="-8" cy="-8" r="5" fill="none" stroke="#4caf50" stroke-width="1">
-        <animate attributeName="r" values="5;12;5" dur="2s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.8;0.1;0.8" dur="2s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="-8" cy="-8" r="8" fill="none" stroke="#4caf50" stroke-width="0.8">
-        <animate attributeName="r" values="8;15;8" dur="2s" repeatCount="indefinite" begin="0.5s"/>
-        <animate attributeName="opacity" values="0.6;0.1;0.6" dur="2s" repeatCount="indefinite" begin="0.5s"/>
+      <!-- Éclat central plus visible -->
+      <circle cx="-8" cy="-8" r="3" fill="url(#neonGreen)">
+        <animate attributeName="r" values="3;7;3" dur="0.8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;0.4;1" dur="0.8s" repeatCount="indefinite"/>
       </circle>
     </g>
-    
-    <!-- Point central discret -->
-    <circle cx="-8" cy="-8" r="2" fill="#4caf50">
-      <animate attributeName="r" values="2;3;2" dur="1.5s" repeatCount="indefinite"/>
-      <animate attributeName="opacity" values="1;0.7;1" dur="1.5s" repeatCount="indefinite"/>
-    </circle>
   </g>
   
-  <!-- Particules de données élégantes -->
-  <g opacity="0.6">
-    <!-- Particules avec traînées -->
+  <!-- Particules d'énergie avec animations plus dynamiques -->
+  <g>
+    <!-- Particule 1 -->
     <g>
-      <circle cx="20" cy="30" r="1.2" fill="#7986cb">
-        <animate attributeName="opacity" values="0;1;0" dur="3s" repeatCount="indefinite"/>
-        <animate attributeName="cy" values="30;25;30" dur="3s" repeatCount="indefinite"/>
+      <circle cx="20" cy="30" r="2.5" fill="#00e5ff">
+        <animate attributeName="opacity" values="0;1;0" dur="1.5s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="30;20;30" dur="1.5s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="2.5;4;2.5" dur="1.5s" repeatCount="indefinite"/>
       </circle>
-      <line x1="20" y1="30" x2="20" y2="35" stroke="#7986cb" stroke-width="0.5" opacity="0.5">
-        <animate attributeName="opacity" values="0;0.5;0" dur="3s" repeatCount="indefinite"/>
-        <animate attributeName="y1" values="30;25;30" dur="3s" repeatCount="indefinite"/>
-        <animate attributeName="y2" values="35;30;35" dur="3s" repeatCount="indefinite"/>
-      </line>
+      <circle cx="20" cy="30" r="1.2" fill="#ffffff">
+        <animate attributeName="opacity" values="0;0.9;0" dur="1.5s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="30;20;30" dur="1.5s" repeatCount="indefinite"/>
+      </circle>
     </g>
     
+    <!-- Particule 2 -->
     <g>
-      <circle cx="78" cy="25" r="1" fill="#5c6bc0">
-        <animate attributeName="opacity" values="0;1;0" dur="2.5s" repeatCount="indefinite"/>
-        <animate attributeName="cy" values="25;20;25" dur="2.5s" repeatCount="indefinite"/>
+      <circle cx="78" cy="25" r="2" fill="#00acc1">
+        <animate attributeName="opacity" values="0;1;0" dur="1.8s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="25;15;25" dur="1.8s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="2;3.5;2" dur="1.8s" repeatCount="indefinite"/>
       </circle>
-      <line x1="78" y1="25" x2="78" y2="29" stroke="#5c6bc0" stroke-width="0.5" opacity="0.5">
-        <animate attributeName="opacity" values="0;0.5;0" dur="2.5s" repeatCount="indefinite"/>
-        <animate attributeName="y1" values="25;20;25" dur="2.5s" repeatCount="indefinite"/>
-        <animate attributeName="y2" values="29;24;29" dur="2.5s" repeatCount="indefinite"/>
-      </line>
+      <circle cx="78" cy="25" r="1" fill="#ffffff">
+        <animate attributeName="opacity" values="0;0.8;0" dur="1.8s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="25;15;25" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
     </g>
     
+    <!-- Particule 3 -->
     <g>
-      <circle cx="72" cy="72" r="1.5" fill="#7986cb">
-        <animate attributeName="opacity" values="0;1;0" dur="3.5s" repeatCount="indefinite"/>
-        <animate attributeName="cy" values="72;67;72" dur="3.5s" repeatCount="indefinite"/>
+      <circle cx="72" cy="72" r="2.8" fill="#00e5ff">
+        <animate attributeName="opacity" values="0;1;0" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="72;60;72" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="2.8;4.5;2.8" dur="2s" repeatCount="indefinite"/>
       </circle>
-      <line x1="72" y1="72" x2="72" y2="77" stroke="#7986cb" stroke-width="0.5" opacity="0.5">
-        <animate attributeName="opacity" values="0;0.5;0" dur="3.5s" repeatCount="indefinite"/>
-        <animate attributeName="y1" values="72;67;72" dur="3.5s" repeatCount="indefinite"/>
-        <animate attributeName="y2" values="77;72;77" dur="3.5s" repeatCount="indefinite"/>
-      </line>
+      <circle cx="72" cy="72" r="1.5" fill="#ffffff">
+        <animate attributeName="opacity" values="0;0.9;0" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="72;60;72" dur="2s" repeatCount="indefinite"/>
+      </circle>
     </g>
     
+    <!-- Particule 4 -->
     <g>
-      <circle cx="28" cy="78" r="1.3" fill="#5c6bc0">
-        <animate attributeName="opacity" values="0;1;0" dur="2.8s" repeatCount="indefinite"/>
-        <animate attributeName="cy" values="78;73;78" dur="2.8s" repeatCount="indefinite"/>
+      <circle cx="28" cy="78" r="2.2" fill="#00acc1">
+        <animate attributeName="opacity" values="0;1;0" dur="1.7s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="78;68;78" dur="1.7s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="2.2;3.8;2.2" dur="1.7s" repeatCount="indefinite"/>
       </circle>
-      <line x1="28" y1="78" x2="28" y2="82" stroke="#5c6bc0" stroke-width="0.5" opacity="0.5">
-        <animate attributeName="opacity" values="0;0.5;0" dur="2.8s" repeatCount="indefinite"/>
-        <animate attributeName="y1" values="78;73;78" dur="2.8s" repeatCount="indefinite"/>
-        <animate attributeName="y2" values="82;77;82" dur="2.8s" repeatCount="indefinite"/>
-      </line>
+      <circle cx="28" cy="78" r="1" fill="#ffffff">
+        <animate attributeName="opacity" values="0;0.8;0" dur="1.7s" repeatCount="indefinite"/>
+        <animate attributeName="cy" values="78;68;78" dur="1.7s" repeatCount="indefinite"/>
+      </circle>
     </g>
   </g>
 </svg>

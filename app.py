@@ -412,14 +412,64 @@ def get_dns_serial():
         return date_serial
     
     try:
-        # Méthode 1: Utiliser une API DNS externe plus fiable
+        # Méthode 1: Utiliser une API DNS externe plus fiable - Google DNS API
         try:
-            # Utiliser l'API de Whois
+            domain = CONFIG["main_domain"]  # Utiliser le domaine principal au lieu du sous-domaine
+            url = f"https://dns.google/resolve?name={domain}&type=SOA"
+            
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                if "Answer" in data:
+                    for answer in data["Answer"]:
+                        if answer.get("type") == 6:  # Type SOA
+                            # Extraire le serial du champ data
+                            soa_data = answer.get("data", "").split(" ")
+                            if len(soa_data) >= 3:
+                                serial = soa_data[2]
+                                logging.info(f"DNS serial found using Google DNS API: {serial}")
+                                last_dns_serial = serial
+                                return serial
+        except Exception as e:
+            logging.error(f"Error with Google DNS API: {str(e)}")
+        
+        # Méthode 2: Utiliser l'API de Cloudflare DNS
+        try:
+            domain = CONFIG["main_domain"]
+            url = f"https://cloudflare-dns.com/dns-query?name={domain}&type=SOA"
+            
+            headers = {
+                "Accept": "application/dns-json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                if "Answer" in data:
+                    for answer in data["Answer"]:
+                        if answer.get("type") == 6:  # Type SOA
+                            # Extraire le serial du champ data
+                            soa_data = answer.get("data", "").split(" ")
+                            if len(soa_data) >= 3:
+                                serial = soa_data[2]
+                                logging.info(f"DNS serial found using Cloudflare DNS API: {serial}")
+                                last_dns_serial = serial
+                                return serial
+        except Exception as e:
+            logging.error(f"Error with Cloudflare DNS API: {str(e)}")
+        
+        # Méthode 3: Utiliser l'API de Whois
+        try:
             domain = CONFIG["main_domain"]  # Utiliser le domaine principal au lieu du sous-domaine
             url = f"https://www.whois.com/whois/{domain}"
             
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
             
             response = requests.get(url, headers=headers, timeout=15)
@@ -445,7 +495,7 @@ def get_dns_serial():
         except Exception as e:
             logging.error(f"Error with Whois API: {str(e)}")
         
-        # Méthode 2: Utiliser l'API JSON Whois
+        # Méthode 4: Utiliser l'API JSON Whois
         try:
             domain = CONFIG["main_domain"]
             url = f"https://jsonwhoisapi.com/api/v1/whois?domainName={domain}"
@@ -473,34 +523,6 @@ def get_dns_serial():
                             return serial
         except Exception as e:
             logging.error(f"Error with JSON Whois API: {str(e)}")
-        
-        # Méthode 3: Utiliser une requête directe au whois
-        try:
-            domain = CONFIG["main_domain"]
-            command = ['whois', domain]
-            response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            
-            if response.returncode == 0:
-                # Chercher le serial dans la réponse
-                serial_patterns = [
-                    r'Registry Expiry Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
-                    r'Expiration Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
-                    r'paid-till:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
-                    r'expires:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})'
-                ]
-                
-                for pattern in serial_patterns:
-                    match = re.search(pattern, response.stdout, re.IGNORECASE)
-                    if match:
-                        date_str = match.group(1)
-                        # Convertir la date en format YYYYMMDD
-                        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-                        serial = date_obj.strftime("%Y%m%d")
-                        logging.info(f"DNS serial found using whois command: {serial}")
-                        last_dns_serial = serial
-                        return serial
-        except Exception as e:
-            logging.error(f"Error with whois command: {str(e)}")
             
     except Exception as e:
         logging.error(f"Error executing DNS commands: {str(e)}")
@@ -511,6 +533,7 @@ def get_dns_serial():
     logging.warning(f"All DNS methods failed, using date-based serial: {date_serial}")
     last_dns_serial = date_serial
     return date_serial
+
 def get_txt_records():
     # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
     if CONFIG["disable_dns_checks"]:

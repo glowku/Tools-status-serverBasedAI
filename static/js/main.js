@@ -384,22 +384,53 @@ document.getElementById('apply-interval').addEventListener('click', function() {
     }
     pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
     
-    // Afficher un message de confirmation
-    const applyButton = document.getElementById('apply-interval');
-    const originalText = applyButton.textContent;
-    applyButton.textContent = 'Applied!';
-    applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
-    
-    setTimeout(() => {
-        applyButton.textContent = originalText;
-        applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
-    }, 2000);
-    
-    console.log("Chart update interval changed to:", intervalMs, "ms");
-    
-    // Forcer une mise à jour immédiate du graphique
-    updatePingChart();
+    // Envoyer la nouvelle configuration au serveur
+    fetch('/api/update_interval', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            interval: defaultValue,
+            unit: unit
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Afficher un message de confirmation
+            const applyButton = document.getElementById('apply-interval');
+            const originalText = applyButton.textContent;
+            applyButton.textContent = 'Applied!';
+            applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
+            
+            setTimeout(() => {
+                applyButton.textContent = originalText;
+                applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
+            }, 2000);
+            
+            console.log("Chart update interval changed to:", intervalMs, "ms");
+            
+            // Forcer une mise à jour immédiate du graphique
+            updatePingChart();
+        }
+    })
+    .catch(error => {
+        console.error('Error updating interval:', error);
+        // Afficher un message d'erreur
+        const applyButton = document.getElementById('apply-interval');
+        const originalText = applyButton.textContent;
+        applyButton.textContent = 'Error!';
+        applyButton.style.background = 'rgba(255, 0, 0, 0.3)';
+        
+        setTimeout(() => {
+            applyButton.textContent = originalText;
+            applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
+        }, 2000);
+    });
 });
+
+// Modifier la fonction updatePingChart pour s'ass
 
 // Modifier la fonction updatePingChart pour s'assurer qu'elle utilise le bon intervalle
 function updatePingChart() {
