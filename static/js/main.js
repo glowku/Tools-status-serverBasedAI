@@ -349,52 +349,53 @@ document.addEventListener('DOMContentLoaded', function() {
     let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
     
     // Handle update interval
- // Handle update interval
-document.getElementById('apply-interval').addEventListener('click', function() {
-    const unit = document.getElementById('interval-unit').value;
-    
-    // Valeurs par défaut pour chaque unité
-    const defaultValues = {
-        'seconds': 2,    // 2 secondes
-        'minutes': 1,    // 1 minute
-        'hours': 1,      // 1 heure
-        'days': 1        // 1 jour
-    };
-    
-    const defaultValue = defaultValues[unit];
-    
-    // Calculer l'intervalle en millisecondes
-    let intervalMs;
-    if (unit === 'seconds') {
-        intervalMs = defaultValue * 1000;
-    } else if (unit === 'minutes') {
-        intervalMs = defaultValue * 60 * 1000;
-    } else if (unit === 'hours') {
-        intervalMs = defaultValue * 60 * 60 * 1000;
-    } else if (unit === 'days') {
-        intervalMs = defaultValue * 24 * 60 * 60 * 1000;
-    }
-    
-    // Mettre à jour l'intervalle de mise à jour du graphique
-    chartUpdateInterval = intervalMs;
-    
-    // Effacer l'intervalle existant et en créer un nouveau
-    if (pingUpdateInterval) {
-        clearInterval(pingUpdateInterval);
-    }
-    pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
-    
-    // Afficher un message de confirmation
-    const applyButton = document.getElementById('apply-interval');
-    const originalText = applyButton.textContent;
-    applyButton.textContent = 'Applied!';
-    applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
-    
-    setTimeout(() => {
-        applyButton.textContent = originalText;
-        applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
-    }, 2000);
-});
+    document.getElementById('apply-interval').addEventListener('click', function() {
+        const unit = document.getElementById('interval-unit').value;
+        
+        // Valeurs par défaut pour chaque unité
+        const defaultValues = {
+            'seconds': 2,    // 2 secondes
+            'minutes': 1,    // 1 minute
+            'hours': 1,      // 1 heure
+            'days': 1        // 1 jour
+        };
+        
+        const defaultValue = defaultValues[unit];
+        
+        // Calculer l'intervalle en millisecondes
+        let intervalMs;
+        if (unit === 'seconds') {
+            intervalMs = defaultValue * 1000;
+        } else if (unit === 'minutes') {
+            intervalMs = defaultValue * 60 * 1000;
+        } else if (unit === 'hours') {
+            intervalMs = defaultValue * 60 * 60 * 1000;
+        } else if (unit === 'days') {
+            intervalMs = defaultValue * 24 * 60 * 60 * 1000;
+        }
+        
+        // Mettre à jour l'intervalle de mise à jour du graphique
+        chartUpdateInterval = intervalMs;
+        
+        // Effacer l'intervalle existant et en créer un nouveau
+        if (pingUpdateInterval) {
+            clearInterval(pingUpdateInterval);
+        }
+        pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
+        
+        // Afficher un message de confirmation
+        const applyButton = document.getElementById('apply-interval');
+        const originalText = applyButton.textContent;
+        applyButton.textContent = 'Applied!';
+        applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
+        
+        setTimeout(() => {
+            applyButton.textContent = originalText;
+            applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
+        }, 2000);
+        
+        console.log("Chart update interval changed to:", intervalMs, "ms");
+    });
     
     // Function to update a status
     function updateStatus(elementId, status) {
