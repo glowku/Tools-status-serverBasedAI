@@ -27,7 +27,7 @@ CONFIG = {
     "log_file": "basedai_monitor.log",
     "ports_to_check": [80, 443, 8545, 30333, 9933, 9944],
     "latency_threshold": 0.5,
-    "history_size": 5,
+    "history_size": 120,  # Augmenté pour stocker 2 heures de données (120 points * 60 secondes)
     "web_port": 5000,
     "fallback_rpc_urls": [
         "https://eth.public-rpc.com",
@@ -67,6 +67,10 @@ latest_data = {
     "transactions": {},
     "ping_history": []
 }
+
+# Variables pour les alertes persistantes
+rpc_status_alert = None
+server_status_alert = None
 
 app = Flask(__name__)
 CORS(app)
@@ -228,6 +232,7 @@ def check_rpc_endpoint():
         
         # Si toutes les tentatives échouent, retourner une erreur
         return {"status": "offline", "message": "All RPC endpoints failed"}
+
 def check_ports_alt():
     """
     Alternative à check_ports qui utilise des requêtes HTTP au lieu de sockets
@@ -846,34 +851,6 @@ def detect_changes(current_results):
                         "severity": "warning"
                     })
     
-    # Check for RPC status changes
-    if "rpc" in current_results and "rpc" in previous_results:
-        if current_results["rpc"]["status"] != previous_results["rpc"]["status"]:
-            alerts.append({
-                "type": "rpc_change",
-                "message": f"🔄 RPC: {previous_results['rpc']['status']} → {current_results['rpc']['status']}",
-                "severity": "critical"
-            })
-    
-    # Check for SSL changes
-    if "ssl_info" in current_results and "ssl_info" in previous_results:
-        current_days = current_results["ssl_info"].get("days_left", "N/A")
-        previous_days = previous_results["ssl_info"].get("days_left", "N/A")
-        
-        if current_days != "N/A" and previous_days != "N/A":
-            if current_days < 30 and previous_days >= 30:
-                alerts.append({
-                    "type": "ssl_expiry_warning",
-                    "message": f"⚠️ SSL certificate expires in {current_days} days",
-                    "severity": "warning"
-                })
-            elif current_days < 7 and previous_days >= 7:
-                alerts.append({
-                    "type": "ssl_expiry_critical",
-                    "message": f"🚨 SSL certificate expires in {current_days} days",
-                    "severity": "critical"
-                })
-    
     # Update previous results
     previous_results = current_results.copy()
     
@@ -884,10 +861,11 @@ def cleanup_expired_alerts():
     current_time = time.time()
     
     if "alerts" in latest_data:
-        # Supprimer les alertes expirées (plus de 30 minutes)
+        # Supprimer les alertes expirées (plus de 30 minutes) sauf les alertes persistantes
         latest_data["alerts"] = [
             alert for alert in latest_data["alerts"] 
-            if current_time - alert.get("timestamp", 0) < 1800  # 30 minutes = 1800 secondes
+            if (current_time - alert.get("timestamp", 0) < 1800 or  # 30 minutes = 1800 secondes
+                alert.get("type") in ["rpc_status", "server_status"])  # Alertes persistantes
         ]
         
         # Limiter le nombre total d'alertes (max 10)
@@ -895,12 +873,12 @@ def cleanup_expired_alerts():
             latest_data["alerts"] = latest_data["alerts"][-10:]
 
 def update_data():
-    global latest_data, check_history
+    global latest_data, check_history, rpc_status_alert, server_status_alert
     
-    current_time = time.time()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_time_seconds = time.time()
+    timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    logging.info(f"Starting data update at {timestamp}")
+    logging.info(f"Starting data update at {timestamp_str}")
     
     # Nettoyer les alertes expirées
     cleanup_expired_alerts()
@@ -937,6 +915,88 @@ def update_data():
     else:
         server_status = "offline"
     
+    # Gérer l'alerte RPC persistante
+    if rpc_status_alert is None:
+        # Créer l'alerte RPC si elle n'existe pas
+        rpc_status_alert = {
+            "type": "rpc_status",
+            "message": f"RPC Status: {rpc_status}",
+            "severity": "info" if rpc_status == "online" else "warning",
+            "timestamp": current_time_seconds,
+            "start_time": current_time_seconds if rpc_status == "offline" else None,
+            "end_time": None,
+            "persistent": True
+        }
+        latest_data["alerts"].append(rpc_status_alert)
+    else:
+        # Mettre à jour l'alerte RPC existante
+        if rpc_status_alert.get("severity") == "warning" and rpc_status == "online":
+            # RPC est revenu en ligne
+            rpc_status_alert["end_time"] = current_time_seconds
+            rpc_status_alert["severity"] = "success"
+            
+            # Calculer la durée de l'indisponibilité
+            duration = current_time_seconds - rpc_status_alert["start_time"]
+            hours = int(duration // 3600)
+            minutes = int((duration % 3600) // 60)
+            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            
+            rpc_status_alert["message"] = f"✅ RPC is back online after {duration_str}"
+        elif rpc_status_alert.get("severity") == "success" and rpc_status == "offline":
+            # RPC est redevenu hors ligne
+            rpc_status_alert["start_time"] = current_time_seconds
+            rpc_status_alert["end_time"] = None
+            rpc_status_alert["severity"] = "warning"
+            rpc_status_alert["message"] = f"⚠️ RPC is down since {datetime.fromtimestamp(current_time_seconds).strftime('%Y-%m-%d %H:%M:%S')}"
+        elif rpc_status_alert.get("severity") == "warning" and rpc_status == "offline":
+            # RPC reste hors ligne - mettre à jour le message
+            start_time = rpc_status_alert.get("start_time", current_time_seconds)
+            rpc_status_alert["message"] = f"⚠️ RPC is down since {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        # Mettre à jour le timestamp pour éviter l'expiration
+        rpc_status_alert["timestamp"] = current_time_seconds
+    
+    # Gérer l'alerte Serveur persistante
+    if server_status_alert is None:
+        # Créer l'alerte Serveur si elle n'existe pas
+        server_status_alert = {
+            "type": "server_status",
+            "message": f"Server Status: {server_status}",
+            "severity": "info" if server_status == "online" else "warning",
+            "timestamp": current_time_seconds,
+            "start_time": current_time_seconds if server_status == "offline" else None,
+            "end_time": None,
+            "persistent": True
+        }
+        latest_data["alerts"].append(server_status_alert)
+    else:
+        # Mettre à jour l'alerte Serveur existante
+        if server_status_alert.get("severity") == "warning" and server_status == "online":
+            # Serveur est revenu en ligne
+            server_status_alert["end_time"] = current_time_seconds
+            server_status_alert["severity"] = "success"
+            
+            # Calculer la durée de l'indisponibilité
+            duration = current_time_seconds - server_status_alert["start_time"]
+            hours = int(duration // 3600)
+            minutes = int((duration % 3600) // 60)
+            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+            
+            server_status_alert["message"] = f"✅ Server is back online after {duration_str}"
+        elif server_status_alert.get("severity") == "success" and server_status == "offline":
+            # Serveur est redevenu hors ligne
+            server_status_alert["start_time"] = current_time_seconds
+            server_status_alert["end_time"] = None
+            server_status_alert["severity"] = "warning"
+            server_status_alert["message"] = f"⚠️ Server is down since {datetime.fromtimestamp(current_time_seconds).strftime('%Y-%m-%d %H:%M:%S')}"
+        elif server_status_alert.get("severity") == "warning" and server_status == "offline":
+            # Serveur reste hors ligne - mettre à jour le message
+            start_time = server_status_alert.get("start_time", current_time_seconds)
+            server_status_alert["message"] = f"⚠️ Server is down since {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        # Mettre à jour le timestamp pour éviter l'expiration
+        server_status_alert["timestamp"] = current_time_seconds
+    
     # Check IP
     try:
         ip_info = get_ip_info()
@@ -967,9 +1027,9 @@ def update_data():
     
     # Check DNS
     try:
-        if current_time - (latest_data.get("last_dns_check", 0)) > CONFIG["dns_check_interval"]:
+        if current_time_seconds - (latest_data.get("last_dns_check", 0)) > CONFIG["dns_check_interval"]:
             version_info = get_dns_serial()
-            latest_data["last_dns_check"] = current_time
+            latest_data["last_dns_check"] = current_time_seconds
         else:
             version_info = latest_data.get("version_info", "N/A")
     except Exception as e:
@@ -1026,14 +1086,14 @@ def update_data():
         "network_info": network_info,
         "transactions": transactions_info,
         "main_domain_info": main_domain_info,
-        "timestamp": timestamp
+        "timestamp": timestamp_str
     }
     
     try:
         new_alerts = detect_changes(current_results)
         # Ajouter un timestamp à chaque nouvelle alerte
         for alert in new_alerts:
-            alert["timestamp"] = current_time
+            alert["timestamp"] = current_time_seconds
         alerts = new_alerts
     except Exception as e:
         logging.error(f"Error detecting changes: {str(e)}")
@@ -1046,7 +1106,8 @@ def update_data():
     # Vérifier les doublons (même message dans les 5 dernières minutes)
     existing_messages = [
         alert["message"] for alert in latest_data["alerts"] 
-        if current_time - alert.get("timestamp", 0) < 300  # 5 minutes
+        if current_time_seconds - alert.get("timestamp", 0) < 300  # 5 minutes
+        and not alert.get("persistent", False)  # Ne pas considérer les alertes persistantes
     ]
     
     for alert in alerts:
@@ -1071,7 +1132,7 @@ def update_data():
         "transactions": transactions_info,
         "main_domain_info": main_domain_info,
         "port_statuses": port_results,
-        "last_check": timestamp,
+        "last_check": timestamp_str,
         "alerts": latest_data["alerts"]  # Utiliser les alertes mises à jour
     })
     
@@ -1081,7 +1142,7 @@ def update_data():
     check_history.append({
         "ping": ping_result.get("time", 0),
         "rpc": rpc_result.get("response_time", 0) if rpc_status == "online" else None,
-        "timestamp": timestamp
+        "timestamp": timestamp_str
     })
     
     if len(check_history) > CONFIG["history_size"]:
@@ -1089,9 +1150,6 @@ def update_data():
     
     # Update history in latest_data
     latest_data["history"] = check_history.copy()
-
-
-
 
 def monitor_loop():
     while True:
@@ -1163,9 +1221,15 @@ def dismiss_alert():
     
     if index is not None and "alerts" in latest_data:
         if 0 <= index < len(latest_data["alerts"]):
-            # Supprimer l'alerte
-            latest_data["alerts"].pop(index)
-            return jsonify({"success": True, "alerts": latest_data["alerts"]})
+            # Vérifier si l'alerte est persistante
+            alert = latest_data["alerts"][index]
+            if not alert.get("persistent", False):
+                # Supprimer l'alerte seulement si elle n'est pas persistante
+                latest_data["alerts"].pop(index)
+                return jsonify({"success": True, "alerts": latest_data["alerts"]})
+            else:
+                # Ne pas supprimer les alertes persistantes
+                return jsonify({"success": False, "message": "Cannot dismiss persistent alerts"})
     
     return jsonify({"success": False})
 
@@ -1173,8 +1237,9 @@ def dismiss_alert():
 def clear_alerts():
     global latest_data
     
-    latest_data["alerts"] = []
-    return jsonify({"success": True, "alerts": []})
+    # Ne supprimer que les alertes non persistantes
+    latest_data["alerts"] = [alert for alert in latest_data["alerts"] if alert.get("persistent", False)]
+    return jsonify({"success": True, "alerts": latest_data["alerts"]})
 
 @app.route('/api/update_interval', methods=['POST'])
 def update_interval():

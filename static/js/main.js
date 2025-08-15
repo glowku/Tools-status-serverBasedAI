@@ -450,179 +450,377 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Informations du dernier bloc connu
+    const lastKnownBlock = {
+        height: 1952248,
+        size: 518,
+        timestamp: "Aug 12 2025 05:42:20 AM (+02:00 UTC)"
+    };
+    
+    // Convertir le timestamp en objet Date
+    const lastBlockDate = new Date(lastKnownBlock.timestamp);
+    
+    // Variables pour le suivi de la panne RPC
+    let rpcDowntimeStart = lastBlockDate; // Utiliser la date du dernier bloc comme début de la panne
+    let rpcDowntimeAlert = null;
+    
+    // Stockage des alertes existantes pour les mettre à jour plutôt que de les remplacer
+    let existingAlerts = [];
+    
+    // Système de cache intelligent pour les données du graphique
+    let chartDataCache = {
+        raw: [],      // Données brutes (toutes les entrées)
+        minute: [],   // Données agrégées par minute
+        hour: [],     // Données agrégées par heure
+        day: []       // Données agrégées par jour
+    };
+    
+    // Fonction pour formater la durée en jours, heures, minutes, secondes
+    function formatDuration(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        
+        const remainingHours = hours % 24;
+        const remainingMinutes = minutes % 60;
+        const remainingSeconds = seconds % 60;
+        
+        let result = '';
+        if (days > 0) result += `${days} day${days > 1 ? 's' : ''} `;
+        if (remainingHours > 0) result += `${remainingHours} hour${remainingHours > 1 ? 's' : ''} `;
+        if (remainingMinutes > 0) result += `${remainingMinutes} minute${remainingMinutes > 1 ? 's' : ''} `;
+        if (remainingSeconds > 0 || result === '') result += `${remainingSeconds} second${remainingSeconds > 1 ? 's' : ''}`;
+        
+        return result.trim();
+    }
+    
     // Fonction pour mettre à jour les alertes
-    function updateAlerts(alerts) {
-        const container = document.getElementById('alerts-container');
-        const currentAlertCount = container.querySelectorAll('.alert-item').length;
+
+// Fonction pour mettre à jour les alertes
+function updateAlerts(alerts) {
+    const container = document.getElementById('alerts-container');
+    
+    // Si le conteneur est vide, initialiser avec un titre
+    if (container.children.length === 0) {
+        const title = document.createElement('div');
+        title.className = 'alerts-title';
+        title.textContent = 'System Alerts';
+        container.appendChild(title);
+    }
+    
+    // Vérifier si l'alerte RPC de panne existe déjà
+    const rpcAlertIndex = existingAlerts.findIndex(alert => alert.id === 'rpc-downtime');
+    
+    // Vérifier si le RPC est actuellement en ligne
+    const rpcOnline = alerts.some(alert => 
+        alert.type === 'RPC' && 
+        alert.message.includes('online') && 
+        !alert.message.includes('offline → online')
+    );
+    
+    if (!rpcOnline && rpcAlertIndex === -1) {
+        // Créer l'alerte de panne RPC si elle n'existe pas et que le RPC est hors ligne
+        rpcDowntimeAlert = {
+            id: 'rpc-downtime',
+            type: 'RPC Downtime',
+            message: `RPC is offline since ${formatLocalDate(rpcDowntimeStart)}`,
+            severity: 'critical',
+            startTime: rpcDowntimeStart,
+            resolved: false,
+            endTime: null,
+            resolvedMessage: null,
+            isRPCDowntime: true
+        };
         
-        container.innerHTML = '';
+        existingAlerts.push(rpcDowntimeAlert);
+    } else if (rpcOnline && rpcAlertIndex !== -1) {
+        // Si le RPC est de nouveau en ligne, mettre à jour l'alerte
+        const existingAlert = existingAlerts[rpcAlertIndex];
+        existingAlert.resolved = true;
+        existingAlert.endTime = new Date();
         
-        if (alerts.length === 0) {
-            container.innerHTML = '<div class="no-alerts">No alerts</div>';
+        const duration = existingAlert.endTime - existingAlert.startTime;
+        existingAlert.resolvedMessage = `RPC is back online. Downtime: ${formatDuration(duration)}`;
+        existingAlert.message = `RPC was offline from ${formatLocalDate(existingAlert.startTime)} to ${formatLocalDate(existingAlert.endTime)}`;
+        
+        // Réinitialiser le suivi de la panne
+        rpcDowntimeStart = null;
+        rpcDowntimeAlert = null;
+    }
+    
+    // Filtrer les alertes pour supprimer uniquement les transitions "offline → online"
+    const filteredAlerts = alerts.filter(alert => {
+        // Supprimer uniquement les alertes de transition RPC "offline → online"
+        if (alert.type === 'RPC' && alert.message.includes('offline → online')) {
+            return false;
+        }
+        return true;
+    });
+    
+    // Mettre à jour les autres alertes
+    filteredAlerts.forEach(newAlert => {
+        // Ignorer l'alerte de panne RPC car nous la gérons séparément
+        if (newAlert.type === 'RPC' && newAlert.message.includes('RPC is offline since')) {
             return;
         }
         
-        // Ajouter un bouton pour tout effacer
-        const clearAllBtn = document.createElement('div');
-        clearAllBtn.className = 'clear-all-btn';
-        clearAllBtn.innerHTML = '<i class="fas fa-trash"></i> Clear All';
-        clearAllBtn.onclick = clearAllAlerts;
-        container.appendChild(clearAllBtn);
+        // Vérifier si une alerte similaire existe déjà
+        const existingAlertIndex = existingAlerts.findIndex(alert => 
+            alert.type === newAlert.type && alert.message.includes(newAlert.message.split(' ')[0])
+        );
         
-        alerts.forEach((alert, index) => {
-            const alertElement = document.createElement('div');
+        if (existingAlertIndex !== -1) {
+            // Mettre à jour l'alerte existante
+            const existingAlert = existingAlerts[existingAlertIndex];
+            
+            // Si le statut a changé (par exemple, de offline à online)
+            if (existingAlert.status !== newAlert.status) {
+                // Marquer comme résolu si le nouveau statut est online
+                if (newAlert.status === 'online' || newAlert.status === 'success') {
+                    existingAlert.resolved = true;
+                    existingAlert.endTime = new Date();
+                    existingAlert.resolvedMessage = `Issue resolved at ${formatLocalDate(existingAlert.endTime)}`;
+                }
+            }
+            
+            // Mettre à jour les autres informations
+            existingAlert.status = newAlert.status;
+            existingAlert.severity = newAlert.severity;
+            existingAlert.timestamp = newAlert.timestamp;
+        } else {
+            // Créer une nouvelle alerte
+            const alert = {
+                ...newAlert,
+                id: Date.now() + Math.random(),
+                startTime: new Date(),
+                resolved: false,
+                endTime: null,
+                resolvedMessage: null
+            };
+            existingAlerts.push(alert);
+        }
+    });
+    
+    // Vider le conteneur sauf le titre
+    const title = container.querySelector('.alerts-title');
+    container.innerHTML = '';
+    if (title) container.appendChild(title);
+    
+    // Afficher toutes les alertes (y compris celles résolues)
+    existingAlerts.forEach(alert => {
+        const alertElement = document.createElement('div');
+        
+        // Déterminer la classe de l'alerte en fonction de son état
+        if (alert.resolved) {
+            alertElement.className = 'alert-item resolved';
+        } else {
             alertElement.className = `alert-item ${alert.severity}`;
-            alertElement.dataset.index = index;
-            
-            // Ajouter la classe 'new' aux alertes qui viennent d'apparaître
-            if (index >= currentAlertCount) {
-                alertElement.classList.add('new');
-            }
-            
-            let iconClass = 'info';
-            if (alert.severity === 'warning') iconClass = 'warning';
-            else if (alert.severity === 'critical') iconClass = 'critical';
-            
-            // Calculer le temps restant avant expiration
-            let timeRemaining = '';
-            if (alert.timestamp) {
-                const now = Date.now() / 1000; // Convertir en secondes
-                const elapsed = now - alert.timestamp;
-                const remaining = Math.max(0, 1800 - elapsed); // 30 minutes = 1800 secondes
-                
-                if (remaining > 0) {
-                    const minutes = Math.floor(remaining / 60);
-                    const seconds = Math.floor(remaining % 60);
-                    timeRemaining = `<div class="alert-timer" data-index="${index}">Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}</div>`;
-                }
-            }
-            
-            alertElement.innerHTML = `
-                <div class="alert-header">
-                    <div class="alert-icon ${iconClass}">
-                        <i class="fas fa-${iconClass === 'info' ? 'info-circle' : iconClass === 'warning' ? 'exclamation-triangle' : 'times-circle'}"></i>
-                    </div>
-                    <div class="alert-actions">
-                        <div class="alert-type">${alert.type}</div>
-                        <div class="alert-close" onclick="dismissAlert(${index})">
-                            <i class="fas fa-times"></i>
-                        </div>
-                    </div>
+        }
+        
+        // Déterminer l'icône
+        let iconClass = 'info';
+        if (alert.resolved) {
+            iconClass = 'check-circle';
+        } else if (alert.severity === 'warning') {
+            iconClass = 'exclamation-triangle';
+        } else if (alert.severity === 'critical') {
+            iconClass = 'times-circle';
+        }
+        
+        // Préparer le message
+        let message = alert.message;
+        if (alert.resolved && alert.resolvedMessage) {
+            message += `<br><span class="resolved-info">${alert.resolvedMessage}</span>`;
+        }
+        
+        // Pour l'alerte de panne RPC, ajouter un compteur en temps réel si elle n'est pas résolue
+        if (alert.isRPCDowntime && !alert.resolved) {
+            const durationElement = document.createElement('span');
+            durationElement.className = 'rpc-downtime-duration';
+            durationElement.setAttribute('data-start', alert.startTime.getTime());
+            message += `<br><span class="rpc-downtime-duration" data-start="${alert.startTime.getTime()}">Calculating downtime...</span>`;
+        }
+        
+        alertElement.innerHTML = `
+            <div class="alert-header">
+                <div class="alert-icon ${alert.resolved ? 'resolved' : alert.severity}">
+                    <i class="fas fa-${iconClass}"></i>
                 </div>
-                <div class="alert-content">
-                    <div class="alert-message">${alert.message}</div>
-                    ${timeRemaining}
-                </div>
-            `;
+                <div class="alert-type">${alert.type}</div>
+            </div>
+            <div class="alert-content">
+                <div class="alert-message">${message}</div>
+            </div>
+        `;
+        
+        container.appendChild(alertElement);
+    });
+    
+    // S'il n'y a aucune alerte, afficher un message
+    if (existingAlerts.length === 0) {
+        container.innerHTML = '<div class="no-alerts">No alerts</div>';
+    }
+    
+    // Démarrer le compteur en temps réel pour les durées de panne RPC
+    updateRPCDowntimeCounters();
+}
+    
+    // Fonction pour mettre à jour les compteurs de durée de panne RPC en temps réel
+    function updateRPCDowntimeCounters() {
+        const counters = document.querySelectorAll('.rpc-downtime-duration');
+        counters.forEach(counter => {
+            const startTime = parseInt(counter.getAttribute('data-start'));
+            const now = Date.now();
+            const duration = now - startTime;
             
-            container.appendChild(alertElement);
+            counter.textContent = `Downtime: ${formatDuration(duration)}`;
         });
         
-        // Démarrer le compte à rebours pour les alertes
-        startAlertTimers();
-        
-        // Vérifier si de nouvelles alertes critiques sont présentes
-        const criticalAlerts = alerts.filter(alert => alert.severity === 'critical');
-        if (criticalAlerts.length > 0) {
-            console.warn(`${criticalAlerts.length} critical alerts detected`);
-        }
+        // Continuer à mettre à jour toutes les secondes
+        setTimeout(updateRPCDowntimeCounters, 1000);
     }
     
-    // Fonction pour supprimer une alerte individuelle
-    function dismissAlert(index) {
-        fetch('/api/dismiss_alert', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ index: index })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateAlerts(data.alerts);
-                showNotification('Alert dismissed', 'success');
+    // Fonction pour ajouter des données au cache intelligent
+    function addToChartDataCache(data) {
+        // Ajouter aux données brutes
+        chartDataCache.raw.push(data);
+        
+        // Nettoyer les données anciennes (plus de 7 jours)
+        const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        chartDataCache.raw = chartDataCache.raw.filter(item => 
+            new Date(item.timestamp).getTime() > sevenDaysAgo
+        );
+        
+        // Agréger par minute
+        aggregateChartData('minute');
+        
+        // Agréger par heure
+        aggregateChartData('hour');
+        
+        // Agréger par jour
+        aggregateChartData('day');
+    }
+    
+    // Fonction pour agréger les données selon une granularité
+    function aggregateChartData(granularity) {
+        const cache = chartDataCache[granularity];
+        const raw = chartDataCache.raw;
+        
+        // Vider le cache actuel
+        chartDataCache[granularity] = [];
+        
+        // Grouper les données par période
+        const groups = {};
+        
+        raw.forEach(item => {
+            const date = new Date(item.timestamp);
+            let key;
+            
+            switch(granularity) {
+                case 'minute':
+                    key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+                    break;
+                case 'hour':
+                    key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()} ${date.getHours()}:00`;
+                    break;
+                case 'day':
+                    key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+                    break;
             }
-        })
-        .catch(error => {
-            console.error('Error dismissing alert:', error);
-            showNotification('Error dismissing alert', 'error');
+            
+            if (!groups[key]) {
+                groups[key] = {
+                    timestamp: item.timestamp,
+                    pingValues: [],
+                    rpcValues: []
+                };
+            }
+            
+            if (item.ping !== null && item.ping !== undefined) {
+                groups[key].pingValues.push(item.ping);
+            }
+            
+            if (item.rpc !== null && item.rpc !== undefined) {
+                groups[key].rpcValues.push(item.rpc);
+            }
         });
-    }
-    
-    // Fonction pour supprimer toutes les alertes
-    function clearAllAlerts() {
-        if (confirm('Are you sure you want to clear all alerts?')) {
-            fetch('/api/clear_alerts', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    updateAlerts([]);
-                    showNotification('All alerts cleared', 'success');
-                }
-            })
-            .catch(error => {
-                console.error('Error clearing alerts:', error);
-                showNotification('Error clearing alerts', 'error');
+        
+        // Calculer les moyennes pour chaque groupe
+        for (const key in groups) {
+            const group = groups[key];
+            
+            // Calculer la moyenne des pings
+            let pingAvg = null;
+            if (group.pingValues.length > 0) {
+                pingAvg = group.pingValues.reduce((sum, val) => sum + val, 0) / group.pingValues.length;
+            }
+            
+            // Calculer la moyenne des RPC
+            let rpcAvg = null;
+            if (group.rpcValues.length > 0) {
+                rpcAvg = group.rpcValues.reduce((sum, val) => sum + val, 0) / group.rpcValues.length;
+            }
+            
+            chartDataCache[granularity].push({
+                timestamp: group.timestamp,
+                ping: pingAvg,
+                rpc: rpcAvg
             });
-        }
-    }
-    
-    // Variable pour stocker l'intervalle des timers d'alerte
-    let alertTimerInterval = null;
-    
-    // Fonction pour gérer les compte à rebours
-    function startAlertTimers() {
-        // Effacer l'intervalle existant pour éviter les doublons
-        if (alertTimerInterval) {
-            clearInterval(alertTimerInterval);
         }
         
-        // Mettre à jour les compte à rebours toutes les secondes
-        alertTimerInterval = setInterval(() => {
-            const timers = document.querySelectorAll('.alert-timer');
-            timers.forEach(timer => {
-                const index = parseInt(timer.dataset.index);
-                
-                // Récupérer les données d'alerte mises à jour
-                fetch('/api/data')
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.alerts && data.alerts[index]) {
-                            const alert = data.alerts[index];
-                            const now = Date.now() / 1000;
-                            const elapsed = now - alert.timestamp;
-                            const remaining = Math.max(0, 1800 - elapsed);
-                            
-                            if (remaining > 0) {
-                                const minutes = Math.floor(remaining / 60);
-                                const seconds = Math.floor(remaining % 60);
-                                timer.textContent = `Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-                                
-                                // Changer la couleur quand il reste moins de 5 minutes
-                                if (remaining < 300) {
-                                    timer.style.color = '#ff9800';
-                                }
-                                if (remaining < 60) {
-                                    timer.style.color = '#f44336';
-                                }
-                            } else {
-                                // L'alerte a expiré, la supprimer
-                                const alertItem = timer.closest('.alert-item');
-                                if (alertItem) {
-                                    alertItem.style.opacity = '0';
-                                    setTimeout(() => alertItem.remove(), 300);
-                                }
-                            }
-                        }
-                    });
-            });
-        }, 1000);
+        // Trier par timestamp
+        chartDataCache[granularity].sort((a, b) => 
+            new Date(a.timestamp) - new Date(b.timestamp)
+        );
+    }
+    
+    // Fonction pour obtenir les données du graphique selon la granularité sélectionnée
+    function getChartDataForGranularity(granularity) {
+        // Déterminer la quantité de données à retourner selon la granularité
+        let maxDataPoints;
+        switch(granularity) {
+            case 'seconds':
+                maxDataPoints = 30; // 30 minutes de données (une point par seconde)
+                break;
+            case 'minutes':
+                maxDataPoints = 60; // 60 minutes de données (une point par minute)
+                break;
+            case 'hours':
+                maxDataPoints = 24; // 24 heures de données (une point par heure)
+                break;
+            case 'days':
+                maxDataPoints = 7;  // 7 jours de données (une point par jour)
+                break;
+            default:
+                maxDataPoints = 30;
+        }
+        
+        // Sélectionner la source de données selon la granularité
+        let dataSource;
+        switch(granularity) {
+            case 'seconds':
+                dataSource = chartDataCache.raw;
+                break;
+            case 'minutes':
+                dataSource = chartDataCache.minute;
+                break;
+            case 'hours':
+                dataSource = chartDataCache.hour;
+                break;
+            case 'days':
+                dataSource = chartDataCache.day;
+                break;
+            default:
+                dataSource = chartDataCache.raw;
+        }
+        
+        // Limiter le nombre de points de données
+        if (dataSource.length > maxDataPoints) {
+            return dataSource.slice(dataSource.length - maxDataPoints);
+        }
+        
+        return dataSource;
     }
     
     // Fonction pour afficher des notifications
@@ -776,7 +974,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Array.from(uniqueLabels, ([label, value]) => ({ label, value }));
     }
     
-    // Function to update ping chart in real-time - CORRIGÉE
+    // Function to update ping chart in real-time - MODIFIÉE
     function updatePingChart() {
         console.log("Updating ping chart with interval:", chartUpdateInterval, "ms");
         
@@ -794,20 +992,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Mettre à jour le statut
                 updateStatus('ping-status', data.ping_status);
                 
-                // Mettre à jour le graphique avec l'historique du ping
-                if (data.ping_history && data.ping_history.length > 0) {
-                    // Récupérer l'unité sélectionnée
-                    const selectedUnit = document.getElementById('interval-unit').value;
+                // Ajouter les nouvelles données au cache
+                if (data.ping_value !== null && data.ping_value !== undefined) {
+                    addToChartDataCache({
+                        timestamp: new Date().toISOString(),
+                        ping: data.ping_value,
+                        rpc: data.rpc_value
+                    });
+                }
+                
+                // Récupérer l'unité sélectionnée
+                const selectedUnit = document.getElementById('interval-unit').value;
+                
+                // Obtenir les données selon la granularité
+                const chartData = getChartDataForGranularity(selectedUnit);
+                
+                if (chartData.length > 0) {
+                    // Préparer les données pour le graphique
+                    const labels = chartData.map(item => {
+                        const date = new Date(item.timestamp);
+                        return formatChartLabel(date.toISOString(), selectedUnit);
+                    });
                     
-                    // Obtenir des étiquettes uniques et les valeurs correspondantes
-                    const uniqueData = getUniqueLabels(data.ping_history, selectedUnit);
-                    
-                    const labels = uniqueData.map(item => item.label);
-                    const pingData = uniqueData.map(item => item.value);
+                    const pingData = chartData.map(item => item.ping);
+                    const rpcData = chartData.map(item => {
+                        // Convertir en ms si nécessaire
+                        return item.rpc !== null ? (item.rpc < 1 ? item.rpc * 1000 : item.rpc) : null;
+                    });
                     
                     // Mettre à jour les données du graphique
                     latencyChart.data.labels = labels;
                     latencyChart.data.datasets[0].data = pingData;
+                    latencyChart.data.datasets[1].data = rpcData;
                     
                     // Ajuster l'échelle du graphique
                     adjustChartScale();
@@ -815,7 +1031,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Forcer un redessin complet du graphique
                     latencyChart.update('active');
                     
-                    console.log("Chart updated successfully with", pingData.length, "unique data points");
+                    console.log("Chart updated successfully with", chartData.length, "data points");
                 }
             })
             .catch(error => console.error('Error updating ping chart:', error));
@@ -937,6 +1153,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         document.getElementById('tx-source').textContent = 
                             data.transactions.source || 'N/A';
                     }
+                } else {
+                    // Forcer l'affichage du dernier bloc connu si aucune donnée n'est disponible
+                    document.getElementById('latest-block').textContent = `#${lastKnownBlock.height}`;
+                    document.getElementById('tx-count').textContent = lastKnownBlock.size;
+                    document.getElementById('tx-source').textContent = `Last seen: ${lastKnownBlock.timestamp}`;
                 }
                 
                 // Update ports
@@ -945,58 +1166,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update alerts
                 updateAlerts(data.alerts);
                 
-                // Mettre à jour le graphique avec les données de ping filtrées
+                // Ajouter les nouvelles données au cache
                 if (data.history && data.history.length > 0) {
-                    // Récupérer l'unité sélectionnée
-                    const selectedUnit = document.getElementById('interval-unit').value;
-                    
-                    // Obtenir des étiquettes uniques et les valeurs correspondantes
-                    const uniqueData = getUniqueLabels(data.history, selectedUnit);
-                    
-                    const labels = uniqueData.map(item => item.label);
-                    const pingData = uniqueData.map(item => item.value);
-                    const rpcData = uniqueData.map(item => {
-                        // Trouver la valeur RPC correspondante dans les données originales
-                        const originalItem = data.history.find(h => {
-                            const date = new Date(h.timestamp);
-                            let label;
-                            
-                            if (selectedUnit === 'seconds') {
-                                const hours = String(date.getHours()).padStart(2, '0');
-                                const minutes = String(date.getMinutes()).padStart(2, '0');
-                                const seconds = String(date.getSeconds()).padStart(2, '0');
-                                label = `${hours}:${minutes}:${seconds}`;
-                            } else if (selectedUnit === 'minutes') {
-                                const hours = String(date.getHours()).padStart(2, '0');
-                                const minutes = String(date.getMinutes()).padStart(2, '0');
-                                label = `${hours}:${minutes}`;
-                            } else if (selectedUnit === 'hours') {
-                                const hours = String(date.getHours()).padStart(2, '0');
-                                label = `${hours}:00`;
-                            } else if (selectedUnit === 'days') {
-                                const month = String(date.getMonth() + 1).padStart(2, '0');
-                                const day = String(date.getDate()).padStart(2, '0');
-                                label = `${month}-${day}`;
-                            } else {
-                                const hours = String(date.getHours()).padStart(2, '0');
-                                const minutes = String(date.getMinutes()).padStart(2, '0');
-                                const seconds = String(date.getSeconds()).padStart(2, '0');
-                                label = `${hours}:${minutes}:${seconds}`;
-                            }
-                            
-                            return label === item.label;
+                    data.history.forEach(item => {
+                        addToChartDataCache({
+                            timestamp: item.timestamp,
+                            ping: item.ping,
+                            rpc: item.rpc
                         });
-                        
-                        return originalItem ? (originalItem.rpc || 0) < 1 ? (originalItem.rpc || 0) * 1000 : (originalItem.rpc || 0) : 0;
+                    });
+                }
+                
+                // Mettre à jour le graphique avec les données du cache
+                const selectedUnit = document.getElementById('interval-unit').value;
+                const chartData = getChartDataForGranularity(selectedUnit);
+                
+                if (chartData.length > 0) {
+                    // Préparer les données pour le graphique
+                    const labels = chartData.map(item => {
+                        const date = new Date(item.timestamp);
+                        return formatChartLabel(date.toISOString(), selectedUnit);
                     });
                     
-                    // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
-                    const filteredPingData = pingData.map(value => value > 0 ? value : null);
-                    const filteredRpcData = rpcData.map(value => value > 0 ? value : null);
+                    const pingData = chartData.map(item => item.ping);
+                    const rpcData = chartData.map(item => {
+                        // Convertir en ms si nécessaire
+                        return item.rpc !== null ? (item.rpc < 1 ? item.rpc * 1000 : item.rpc) : null;
+                    });
                     
+                    // Mettre à jour les données du graphique
                     latencyChart.data.labels = labels;
-                    latencyChart.data.datasets[0].data = filteredPingData;
-                    latencyChart.data.datasets[1].data = filteredRpcData;
+                    latencyChart.data.datasets[0].data = pingData;
+                    latencyChart.data.datasets[1].data = rpcData;
                     
                     // Ajuster l'échelle du graphique
                     adjustChartScale();
@@ -1010,6 +1211,11 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 console.error('Error fetching data:', error);
                 document.getElementById('sync-status').textContent = 'Sync Error';
+                
+                // En cas d'erreur, afficher quand même le dernier bloc connu
+                document.getElementById('latest-block').textContent = `#${lastKnownBlock.height}`;
+                document.getElementById('tx-count').textContent = lastKnownBlock.size;
+                document.getElementById('tx-source').textContent = `Last seen: ${lastKnownBlock.timestamp}`;
             });
     }
     

@@ -754,3 +754,19 @@ body {
         gap: 10px;
     }
 }
+
+
+.rpc-down-indicator {
+    margin-top: 8px;
+    padding: 5px 8px;
+    background-color: rgba(255, 193, 7, 0.2);
+    border-left: 3px solid #ffc107;
+    color: #ffc107;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+}
+
+.rpc-down-indicator i {
+    margin-right: 8px;
+}
