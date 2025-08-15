@@ -173,7 +173,8 @@ def check_rpc_endpoint():
         response = requests.post(
             CONFIG["rpc_url"], 
             json=rpc_payload, 
-            timeout=15  # Timeout plus long
+            timeout=15,  # Timeout plus long
+            headers={'User-Agent': 'Mozilla/5.0 (compatible; BasedAI-Monitor/1.0)'}
         )
         response_time = time.time() - start_time
         
@@ -188,6 +189,9 @@ def check_rpc_endpoint():
             else:
                 logging.error(f"Invalid RPC response: {result}")
                 return {"status": "offline", "message": "Invalid RPC response"}
+        elif response.status_code == 502:
+            logging.error("RPC returned 502 Bad Gateway - server may be temporarily unavailable")
+            return {"status": "offline", "message": "RPC server temporarily unavailable (502)"}
         else:
             logging.error(f"RPC HTTP error: {response.status_code}")
             return {"status": "offline", "code": response.status_code}
@@ -203,7 +207,8 @@ def check_rpc_endpoint():
                 response = requests.post(
                     fallback_url, 
                     json=rpc_payload, 
-                    timeout=15
+                    timeout=15,
+                    headers={'User-Agent': 'Mozilla/5.0 (compatible; BasedAI-Monitor/1.0)'}
                 )
                 response_time = time.time() - start_time
                 
@@ -223,7 +228,6 @@ def check_rpc_endpoint():
         
         # Si toutes les tentatives échouent, retourner une erreur
         return {"status": "offline", "message": "All RPC endpoints failed"}
-
 def check_ports_alt():
     """
     Alternative à check_ports qui utilise des requêtes HTTP au lieu de sockets
@@ -396,8 +400,11 @@ def get_main_domain_info():
 def get_dns_serial():
     global last_dns_serial
     
-    # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
-    if CONFIG["disable_dns_checks"]:
+    # Forcer l'activation des vérifications DNS sur Render
+    force_dns_checks = os.environ.get('FORCE_DNS_CHECKS', 'false').lower() == 'true'
+    
+    # Si les vérifications DNS sont désactivées mais qu'on force quand même
+    if CONFIG["disable_dns_checks"] and not force_dns_checks:
         logging.info("DNS checks disabled, using default serial")
         today = datetime.now()
         date_serial = today.strftime("%Y%m%d")
@@ -405,31 +412,65 @@ def get_dns_serial():
         return date_serial
     
     try:
-        # Try using Python's socket.getaddrinfo instead of nslookup
+        # Méthode directe avec socket pour les environnements restreints
         try:
+            import socket
             import dns.resolver
-            answers = dns.resolver.resolve(CONFIG["domain"], 'SOA')
+            
+            # Essayer de résoudre directement
+            resolver = dns.resolver.Resolver()
+            # Utiliser des DNS publics
+            resolver.nameservers = ['1.1.1.1', '8.8.8.8']
+            
+            answers = resolver.resolve(CONFIG["domain"], 'SOA')
             for rdata in answers:
                 if hasattr(rdata, 'serial'):
                     serial = str(rdata.serial)
-                    logging.info(f"DNS serial found using dns.resolver: {serial}")
+                    logging.info(f"DNS serial found using direct resolver: {serial}")
                     last_dns_serial = serial
                     return serial
-        except ImportError:
-            pass
         except Exception as e:
-            logging.error(f"Error with dns.resolver: {str(e)}")
+            logging.error(f"Error with direct DNS resolver: {str(e)}")
         
-        # Fallback to nslookup
+        # Méthode alternative avec subprocess
+        try:
+            # Essayer avec dig si disponible
+            command = ['dig', '+short', 'SOA', CONFIG["domain"]]
+            response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            
+            if response.returncode == 0:
+                # Extraire le serial de la réponse dig
+                lines = response.stdout.strip().split('\n')
+                for line in lines:
+                    if line.strip():
+                        parts = line.split()
+                        if len(parts) >= 7:
+                            serial = parts[6]
+                            if serial.isdigit():
+                                logging.info(f"DNS serial found using dig: {serial}")
+                                last_dns_serial = serial
+                                return serial
+        except Exception as e:
+            logging.error(f"Error with dig: {str(e)}")
+        
+        # Dernière tentative avec nslookup
         command = ['nslookup', '-type=SOA', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         if response.returncode == 0:
+            # Chercher spécifiquement le format "serial = 2025081401"
+            serial_pattern = r'serial\s*=\s*(\d{10})'
+            match = re.search(serial_pattern, response.stdout)
+            if match:
+                serial = match.group(1)
+                logging.info(f"DNS serial found (10 digits format): {serial}")
+                last_dns_serial = serial
+                return serial
+            
+            # Autres patterns
             patterns = [
                 r'serial\s*=\s*(\d+)',
                 r'serial\s*(\d+)',
-                r'serial\s*=\s*(\d+)\s*',
-                r'serial\s*(\d+)\s*',
             ]
             
             for pattern in patterns:
@@ -440,39 +481,18 @@ def get_dns_serial():
                     last_dns_serial = serial
                     return serial
             
-            # Chercher spécifiquement le format "serial = 2025081401"
-            serial_pattern = r'serial\s*=\s*(\d{10})'
-            match = re.search(serial_pattern, response.stdout)
-            if match:
-                serial = match.group(1)
-                logging.info(f"DNS serial found (10 digits format): {serial}")
-                last_dns_serial = serial
-                return serial
-            
             logging.error("DNS serial not found in nslookup output")
-            # If we can't find DNS serial, generate one based on current date
-            today = datetime.now()
-            date_serial = today.strftime("%Y%m%d")
-            logging.info(f"Generated DNS serial based on current date: {date_serial}")
-            last_dns_serial = date_serial
-            return date_serial
         else:
             logging.error(f"nslookup command failed: {response.stderr}")
-            # If nslookup fails, generate one based on current date
-            today = datetime.now()
-            date_serial = today.strftime("%Y%m%d")
-            logging.info(f"Generated DNS serial based on current date: {date_serial}")
-            last_dns_serial = date_serial
-            return date_serial
     except Exception as e:
-        logging.error(f"Error executing nslookup: {str(e)}")
-        # If there's an exception, generate one based on current date
-        today = datetime.now()
-        date_serial = today.strftime("%Y%m%d")
-        logging.info(f"Generated DNS serial based on current date: {date_serial}")
-        last_dns_serial = date_serial
-        return date_serial
-
+        logging.error(f"Error executing DNS commands: {str(e)}")
+    
+    # Si toutes les méthodes échouent, utiliser une valeur par défaut basée sur la date actuelle
+    today = datetime.now()
+    date_serial = today.strftime("%Y%m%d")
+    logging.warning(f"All DNS methods failed, using date-based serial: {date_serial}")
+    last_dns_serial = date_serial
+    return date_serial
 def get_txt_records():
     # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
     if CONFIG["disable_dns_checks"]:
@@ -1132,6 +1152,11 @@ def update_interval():
 if __name__ == "__main__":
     # Configuration pour Render
     port = int(os.environ.get('PORT', 5000))
+    
+    # Forcer l'activation des vérifications DNS sur Render
+    if os.environ.get('RENDER') == 'true':
+        os.environ['FORCE_DNS_CHECKS'] = 'true'
+        logging.info("Forcing DNS checks on Render environment")
     
     # Initialize DNS serial
     if last_dns_serial is None:
