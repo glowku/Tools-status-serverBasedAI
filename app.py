@@ -362,7 +362,7 @@ def get_security_info():
         if security_headers:
             return ", ".join(security_headers) + f" | {cert_info}"
         else:
-            return f"No security headers | {cert_info}"
+            return f"Info SSL | {cert_info}"
     except Exception as e:
         return f"Error: {str(e)}"
 
