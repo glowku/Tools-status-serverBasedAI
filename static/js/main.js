@@ -634,8 +634,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 3000);
     }
     
-    // Fonction pour formater la date en UTC - CORRIGÉE
-    function formatUTCDate(dateString) {
+    // Fonction pour formater la date en heure locale - CORRIGÉE
+    function formatLocalDate(dateString) {
         if (!dateString) return 'N/A';
         
         try {
@@ -643,17 +643,56 @@ document.addEventListener('DOMContentLoaded', function() {
             // Vérifier si la date est valide
             if (isNaN(date.getTime())) return 'N/A';
             
-            // Récupérer les composants UTC directement
-            const year = date.getUTCFullYear();
-            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(date.getUTCDate()).padStart(2, '0');
-            const hours = String(date.getUTCHours()).padStart(2, '0');
-            const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-            const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+            // Formater en heure locale
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
             
-            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} UTC`;
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
         } catch (e) {
             console.error('Error formatting date:', e);
+            return dateString;
+        }
+    }
+    
+    // Fonction pour formater les étiquettes du graphique en fonction de l'unité sélectionnée
+    function formatChartLabel(dateString, unit) {
+        if (!dateString) return 'N/A';
+        
+        try {
+            const date = new Date(dateString);
+            // Vérifier si la date est valide
+            if (isNaN(date.getTime())) return 'N/A';
+            
+            // Formater en fonction de l'unité sélectionnée
+            if (unit === 'seconds') {
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${hours}:${minutes}:${seconds}`;
+            } else if (unit === 'minutes') {
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                return `${hours}:${minutes}`;
+            } else if (unit === 'hours') {
+                const hours = String(date.getHours()).padStart(2, '0');
+                return `${hours}:00`;
+            } else if (unit === 'days') {
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${month}-${day}`;
+            }
+            
+            // Format par défaut (secondes)
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        } catch (e) {
+            console.error('Error formatting chart label:', e);
             return dateString;
         }
     }
@@ -678,13 +717,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Mettre à jour le graphique avec l'historique du ping
                 if (data.ping_history && data.ping_history.length > 0) {
+                    // Récupérer l'unité sélectionnée
+                    const selectedUnit = document.getElementById('interval-unit').value;
+                    
                     const labels = data.ping_history.map(h => {
-                        const date = new Date(h.timestamp);
-                        // Formater en UTC correctement
-                        const hours = String(date.getUTCHours()).padStart(2, '0');
-                        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                        const seconds = String(date.getUTCSeconds()).padStart(2, '0');
-                        return `${hours}:${minutes}:${seconds} UTC`;
+                        return formatChartLabel(h.timestamp, selectedUnit);
                     });
                     
                     const pingData = data.ping_history.map(h => h.ping || 0);
@@ -781,8 +818,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
                 document.getElementById('security').textContent = data.security_info || 'N/A';
                 
-                // Update last check with UTC format - CORRIGÉ
-                document.getElementById('last-check').textContent = formatUTCDate(data.last_check);
+                // Update last check with local time format - CORRIGÉ
+                document.getElementById('last-check').textContent = formatLocalDate(data.last_check);
                 
                 // Update TXT Records
                 const txtContainer = document.getElementById('txt-records');
@@ -834,13 +871,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Mettre à jour le graphique avec les données de ping filtrées
                 if (data.history && data.history.length > 0) {
+                    // Récupérer l'unité sélectionnée
+                    const selectedUnit = document.getElementById('interval-unit').value;
+                    
                     const labels = data.history.map(h => {
-                        const date = new Date(h.timestamp);
-                        // Formater en UTC correctement
-                        const hours = String(date.getUTCHours()).padStart(2, '0');
-                        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-                        const seconds = String(date.getUTCSeconds()).padStart(2, '0');
-                        return `${hours}:${minutes}:${seconds} UTC`;
+                        return formatChartLabel(h.timestamp, selectedUnit);
                     });
                     
                     const pingData = data.history.map(h => h.ping || 0);
