@@ -1,31 +1,31 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize unified background with particles and 3D cubes
     function initUnifiedBackground() {
-    const container = document.getElementById('unified-background');
-    if (!container) return;
-    
-    // Créer un élément pour le dégradé radial
-    const gradientDiv = document.createElement('div');
-    gradientDiv.style.position = 'absolute';
-    gradientDiv.style.top = '0';
-    gradientDiv.style.left = '0';
-    gradientDiv.style.width = '100%';
-    gradientDiv.style.height = '100%';
-    gradientDiv.style.zIndex = '0';
-    gradientDiv.style.background = 'radial-gradient(circle at center, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))';
-    gradientDiv.style.backgroundSize = '200% 200%';
-    container.appendChild(gradientDiv);
-    
-    // Animer le dégradé
-    let angle = 0;
-    function animateGradient() {
-        angle += 0.5;
-        const x = 50 + 50 * Math.cos(angle * Math.PI / 180);
-        const y = 50 + 50 * Math.sin(angle * Math.PI / 180);
-        gradientDiv.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))`;
-        requestAnimationFrame(animateGradient);
-    }
-    animateGradient();
+        const container = document.getElementById('unified-background');
+        if (!container) return;
+        
+        // Créer un élément pour le dégradé radial
+        const gradientDiv = document.createElement('div');
+        gradientDiv.style.position = 'absolute';
+        gradientDiv.style.top = '0';
+        gradientDiv.style.left = '0';
+        gradientDiv.style.width = '100%';
+        gradientDiv.style.height = '100%';
+        gradientDiv.style.zIndex = '0';
+        gradientDiv.style.background = 'radial-gradient(circle at center, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))';
+        gradientDiv.style.backgroundSize = '200% 200%';
+        container.appendChild(gradientDiv);
+        
+        // Animer le dégradé
+        let angle = 0;
+        function animateGradient() {
+            angle += 0.5;
+            const x = 50 + 50 * Math.cos(angle * Math.PI / 180);
+            const y = 50 + 50 * Math.sin(angle * Math.PI / 180);
+            gradientDiv.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))`;
+            requestAnimationFrame(animateGradient);
+        }
+        animateGradient();
         
         // Create canvas for particles
         const particlesCanvas = document.createElement('canvas');
@@ -126,7 +126,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         animateParticles();
         
-        
         // Initialize 3D scene
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -220,100 +219,129 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize latency chart
     const ctx = document.getElementById('latency-chart').getContext('2d');
-  // Remplacez la configuration du graphique par celle-ci
-const latencyChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            {
-                label: 'Ping (ms)',
-                data: [],
-                borderColor: '#00ff00',
-                backgroundColor: 'rgba(0, 255, 0, 0.1)',
-                tension: 0.4,
-                fill: true
-            },
-            {
-                label: 'RPC (ms)',
-                data: [],
-                borderColor: '#ffff00',
-                backgroundColor: 'rgba(255, 255, 0, 0.1)',
-                tension: 0.4,
-                fill: true
-            }
-        ]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-            y: {
-                // Supprimer le min/max fixe pour permettre l'adaptation automatique
-                title: {
-                    display: true,
-                    text: 'Latency (ms)',
-                    color: '#00ffff',
-                    font: {
-                        size: 12,
-                        family: "'Orbitron', monospace"
+    
+    // Ajoutez cette fonction pour ajuster dynamiquement l'échelle
+    function adjustChartScale() {
+        // Récupérer toutes les valeurs de ping valides
+        const pingValues = latencyChart.data.datasets[0].data.filter(v => v !== null && v > 0);
+        const rpcValues = latencyChart.data.datasets[1].data.filter(v => v !== null && v > 0);
+        const allValues = [...pingValues, ...rpcValues];
+        
+        if (allValues.length === 0) return;
+        
+        // Calculer min et max avec une marge
+        const minValue = Math.min(...allValues);
+        const maxValue = Math.max(...allValues);
+        
+        // Ajouter une marge de 20% pour une meilleure visualisation
+        const margin = (maxValue - minValue) * 0.2;
+        const adjustedMin = Math.max(0, minValue - margin);
+        const adjustedMax = maxValue + margin;
+        
+        // S'assurer que l'échelle minimale est au moins de 100ms pour les valeurs normales
+        const finalMin = Math.min(adjustedMin, 50);
+        const finalMax = Math.max(adjustedMax, 200);
+        
+        // Appliquer la nouvelle échelle
+        latencyChart.options.scales.y.min = finalMin;
+        latencyChart.options.scales.y.max = finalMax;
+        latencyChart.update('none'); // Mettre à jour sans animation
+    }
+    
+    // Remplacez la configuration du graphique par celle-ci
+    const latencyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                {
+                    label: 'Ping (ms)',
+                    data: [],
+                    borderColor: '#00ff00',
+                    backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                },
+                {
+                    label: 'RPC (ms)',
+                    data: [],
+                    borderColor: '#ffff00',
+                    backgroundColor: 'rgba(255, 255, 0, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    // Supprimer le min/max fixe pour permettre l'adaptation automatique
+                    title: {
+                        display: true,
+                        text: 'Latency (ms)',
+                        color: '#00ffff',
+                        font: {
+                            size: 12,
+                            family: "'Orbitron', monospace"
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#00ffff',
+                        font: {
+                            family: "'Orbitron', monospace"
+                        },
+                        callback: function(value) {
+                            return value + ' ms';
+                        }
                     }
                 },
-                grid: {
-                    color: 'rgba(0, 255, 255, 0.1)'
+                x: {
+                    grid: {
+                        color: 'rgba(0, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: '#00ffff',
+                        font: {
+                            family: "'Orbitron', monospace"
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#00ffff',
+                        font: {
+                            family: "'Orbitron', monospace"
+                        }
+                    }
                 },
-                ticks: {
-                    color: '#00ffff',
-                    font: {
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#00ffff',
+                    bodyColor: '#ffffff',
+                    borderColor: '#00ffff',
+                    borderWidth: 1,
+                    titleFont: {
                         family: "'Orbitron', monospace"
                     },
-                    callback: function(value) {
-                        return value + ' ms';
-                    }
-                }
-            },
-            x: {
-                grid: {
-                    color: 'rgba(0, 255, 255, 0.1)'
-                },
-                ticks: {
-                    color: '#00ffff',
-                    font: {
+                    bodyFont: {
                         family: "'Orbitron', monospace"
-                    }
-                }
-            }
-        },
-        plugins: {
-            legend: {
-                labels: {
-                    color: '#00ffff',
-                    font: {
-                        family: "'Orbitron', monospace"
-                    }
-                }
-            },
-            tooltip: {
-                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                titleColor: '#00ffff',
-                bodyColor: '#ffffff',
-                borderColor: '#00ffff',
-                borderWidth: 1,
-                titleFont: {
-                    family: "'Orbitron', monospace"
-                },
-                bodyFont: {
-                    family: "'Orbitron', monospace"
-                },
-                callbacks: {
-                    label: function(context) {
-                        return context.dataset.label + ': ' + context.parsed.y + ' ms';
+                    },
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.parsed.y + ' ms';
+                        }
                     }
                 }
             }
         }
-    }
-});
+    });
     
     // Variable to store update interval
     let updateInterval;
@@ -321,64 +349,351 @@ const latencyChart = new Chart(ctx, {
     let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
     
     // Handle update interval
-    document.getElementById('apply-interval').addEventListener('click', function() {
-        const value = document.getElementById('interval-value').value;
-        const unit = document.getElementById('interval-unit').value;
+ // Handle update interval
+document.getElementById('apply-interval').addEventListener('click', function() {
+    const unit = document.getElementById('interval-unit').value;
+    
+    // Valeurs par défaut pour chaque unité
+    const defaultValues = {
+        'seconds': 2,    // 2 secondes
+        'minutes': 1,    // 1 minute
+        'hours': 1,      // 1 heure
+        'days': 1        // 1 jour
+    };
+    
+    const defaultValue = defaultValues[unit];
+    
+    // Calculer l'intervalle en millisecondes
+    let intervalMs;
+    if (unit === 'seconds') {
+        intervalMs = defaultValue * 1000;
+    } else if (unit === 'minutes') {
+        intervalMs = defaultValue * 60 * 1000;
+    } else if (unit === 'hours') {
+        intervalMs = defaultValue * 60 * 60 * 1000;
+    } else if (unit === 'days') {
+        intervalMs = defaultValue * 24 * 60 * 60 * 1000;
+    }
+    
+    // Mettre à jour l'intervalle de mise à jour du graphique
+    chartUpdateInterval = intervalMs;
+    
+    // Effacer l'intervalle existant et en créer un nouveau
+    if (pingUpdateInterval) {
+        clearInterval(pingUpdateInterval);
+    }
+    pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
+    
+    // Afficher un message de confirmation
+    const applyButton = document.getElementById('apply-interval');
+    const originalText = applyButton.textContent;
+    applyButton.textContent = 'Applied!';
+    applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
+    
+    setTimeout(() => {
+        applyButton.textContent = originalText;
+        applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
+    }, 2000);
+});
+    
+    // Function to update a status
+    function updateStatus(elementId, status) {
+        const element = document.getElementById(elementId);
+        element.textContent = status;
+        element.className = 'status-value';
         
-        // Clear existing interval
-        if (updateInterval) {
-            clearInterval(updateInterval);
+        if (status === 'online' || status === 'success') {
+            element.classList.add('online');
+        } else if (status === 'offline' || status === 'failed') {
+            element.classList.add('offline');
+        } else if (status === 'warning') {
+            element.classList.add('warning');
+        } else if (status === 'error') {
+            element.classList.add('error');
+        }
+    }
+    
+    // Modifiez la fonction updatePorts() pour mieux gérer les données manquantes
+    function updatePorts(ports) {
+        const container = document.getElementById('ports-status');
+        container.innerHTML = '';
+        
+        if (!ports || Object.keys(ports).length === 0) {
+            container.innerHTML = '<div class="no-ports">No port data available</div>';
+            return;
         }
         
-        // Calculate interval in milliseconds
-        let intervalMs;
-        if (unit === 'seconds') {
-            intervalMs = value * 1000;
-            // If the unit is seconds and value is 1 or 2, update the ping chart interval too
-            if (value <= 2) {
-                chartUpdateInterval = intervalMs;
-                if (pingUpdateInterval) {
-                    clearInterval(pingUpdateInterval);
+        for (const [port, status] of Object.entries(ports)) {
+            const portElement = document.createElement('div');
+            portElement.className = `port-item ${status}`;
+            portElement.textContent = `${port}: ${status}`;
+            container.appendChild(portElement);
+        }
+    }
+    
+    // Fonction pour mettre à jour les alertes
+    function updateAlerts(alerts) {
+        const container = document.getElementById('alerts-container');
+        const currentAlertCount = container.querySelectorAll('.alert-item').length;
+        
+        container.innerHTML = '';
+        
+        if (alerts.length === 0) {
+            container.innerHTML = '<div class="no-alerts">No alerts</div>';
+            return;
+        }
+        
+        // Ajouter un bouton pour tout effacer
+        const clearAllBtn = document.createElement('div');
+        clearAllBtn.className = 'clear-all-btn';
+        clearAllBtn.innerHTML = '<i class="fas fa-trash"></i> Clear All';
+        clearAllBtn.onclick = clearAllAlerts;
+        container.appendChild(clearAllBtn);
+        
+        alerts.forEach((alert, index) => {
+            const alertElement = document.createElement('div');
+            alertElement.className = `alert-item ${alert.severity}`;
+            alertElement.dataset.index = index;
+            
+            // Ajouter la classe 'new' aux alertes qui viennent d'apparaître
+            if (index >= currentAlertCount) {
+                alertElement.classList.add('new');
+            }
+            
+            let iconClass = 'info';
+            if (alert.severity === 'warning') iconClass = 'warning';
+            else if (alert.severity === 'critical') iconClass = 'critical';
+            
+            // Calculer le temps restant avant expiration
+            let timeRemaining = '';
+            if (alert.timestamp) {
+                const now = Date.now() / 1000; // Convertir en secondes
+                const elapsed = now - alert.timestamp;
+                const remaining = Math.max(0, 1800 - elapsed); // 30 minutes = 1800 secondes
+                
+                if (remaining > 0) {
+                    const minutes = Math.floor(remaining / 60);
+                    const seconds = Math.floor(remaining % 60);
+                    timeRemaining = `<div class="alert-timer" data-index="${index}">Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}</div>`;
                 }
-                pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
             }
-        } else if (unit === 'minutes') {
-            intervalMs = value * 60 * 1000;
-        } else if (unit === 'hours') {
-            intervalMs = value * 60 * 60 * 1000;
-        } else if (unit === 'days') {
-            intervalMs = value * 24 * 60 * 60 * 1000;
-        }
+            
+            alertElement.innerHTML = `
+                <div class="alert-header">
+                    <div class="alert-icon ${iconClass}">
+                        <i class="fas fa-${iconClass === 'info' ? 'info-circle' : iconClass === 'warning' ? 'exclamation-triangle' : 'times-circle'}"></i>
+                    </div>
+                    <div class="alert-actions">
+                        <div class="alert-type">${alert.type}</div>
+                        <div class="alert-close" onclick="dismissAlert(${index})">
+                            <i class="fas fa-times"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert-content">
+                    <div class="alert-message">${alert.message}</div>
+                    ${timeRemaining}
+                </div>
+            `;
+            
+            container.appendChild(alertElement);
+        });
         
-        // Set new interval for data updates
-        updateInterval = setInterval(updateData, intervalMs);
-        
-        // Show success message
-        const applyButton = document.getElementById('apply-interval');
-        const originalText = applyButton.textContent;
-        applyButton.textContent = 'Applied!';
-        applyButton.style.background = 'rgba(0, 255, 0, 0.3)';
-        
-        setTimeout(() => {
-            applyButton.textContent = originalText;
-            applyButton.style.background = 'rgba(0, 255, 255, 0.2)';
-        }, 2000);
-    });
+        // Démarrer le compte à rebours pour les alertes
+        startAlertTimers();
+    }
     
-// Modifier la fonction updateData() pour inclure la mise à jour des alertes
-function updateData() {
-    console.log("Updating data...");
-    document.getElementById('sync-status').textContent = 'Synchronizing...';
-    
-    fetch('/api/data')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
+    // Fonction pour supprimer une alerte individuelle
+    function dismissAlert(index) {
+        fetch('/api/dismiss_alert', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ index: index })
         })
+        .then(response => response.json())
         .then(data => {
-            console.log("Data received:", data);
+            if (data.success) {
+                updateAlerts(data.alerts);
+                showNotification('Alert dismissed', 'success');
+            }
+        })
+        .catch(error => {
+            console.error('Error dismissing alert:', error);
+            showNotification('Error dismissing alert', 'error');
+        });
+    }
+    
+    // Fonction pour supprimer toutes les alertes
+    function clearAllAlerts() {
+        if (confirm('Are you sure you want to clear all alerts?')) {
+            fetch('/api/clear_alerts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateAlerts([]);
+                    showNotification('All alerts cleared', 'success');
+                }
+            })
+            .catch(error => {
+                console.error('Error clearing alerts:', error);
+                showNotification('Error clearing alerts', 'error');
+            });
+        }
+    }
+    
+    // Fonction pour gérer les compte à rebours
+    function startAlertTimers() {
+        // Mettre à jour les compte à rebours toutes les secondes
+        setInterval(() => {
+            const timers = document.querySelectorAll('.alert-timer');
+            timers.forEach(timer => {
+                const index = parseInt(timer.dataset.index);
+                
+                // Récupérer les données d'alerte mises à jour
+                fetch('/api/data')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.alerts && data.alerts[index]) {
+                            const alert = data.alerts[index];
+                            const now = Date.now() / 1000;
+                            const elapsed = now - alert.timestamp;
+                            const remaining = Math.max(0, 1800 - elapsed);
+                            
+                            if (remaining > 0) {
+                                const minutes = Math.floor(remaining / 60);
+                                const seconds = Math.floor(remaining % 60);
+                                timer.textContent = `Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                                
+                                // Changer la couleur quand il reste moins de 5 minutes
+                                if (remaining < 300) {
+                                    timer.style.color = '#ff9800';
+                                }
+                                if (remaining < 60) {
+                                    timer.style.color = '#f44336';
+                                }
+                            } else {
+                                // L'alerte a expiré, la supprimer
+                                const alertItem = timer.closest('.alert-item');
+                                if (alertItem) {
+                                    alertItem.style.opacity = '0';
+                                    setTimeout(() => alertItem.remove(), 300);
+                                }
+                            }
+                        }
+                    });
+            });
+        }, 1000);
+    }
+    
+    // Fonction pour afficher des notifications
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                <span>${message}</span>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Animation d'apparition
+        setTimeout(() => notification.classList.add('show'), 10);
+        
+        // Disparaître après 3 secondes
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+    
+    // Function to update chart
+    function updateChart(history) {
+        if (!history || history.length === 0) return;
+        
+        const labels = history.map(h => {
+            const date = new Date(h.timestamp);
+            return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+        });
+        
+        const pingData = history.map(h => h.ping || 0);
+        const rpcData = history.map(h => {
+            // Convert from seconds to milliseconds if needed
+            return (h.rpc || 0) < 1 ? (h.rpc || 0) * 1000 : (h.rpc || 0);
+        });
+        
+        // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
+        const filteredPingData = pingData.map(value => value > 0 ? value : null);
+        
+        latencyChart.data.labels = labels;
+        latencyChart.data.datasets[0].data = filteredPingData;
+        latencyChart.data.datasets[1].data = rpcData;
+        latencyChart.update();
+    }
+    
+    // Function to update ping chart in real-time
+    function updatePingChart() {
+        fetch('/api/data')
+            .then(response => response.json())
+            .then(data => {
+                // Mettre à jour les valeurs de ping en temps réel
+                if (data.ping_value !== null && data.ping_value !== undefined && data.ping_value > 0) {
+                    document.getElementById('ping-metric').textContent = `${data.ping_value.toFixed(2)} ms`;
+                } else {
+                    // Si pas de valeur valide, afficher "No data"
+                    document.getElementById('ping-metric').textContent = 'No data';
+                }
+                
+                // Mettre à jour le statut
+                updateStatus('ping-status', data.ping_status);
+                
+                // Mettre à jour le graphique avec l'historique du ping
+                if (data.ping_history && data.ping_history.length > 0) {
+                    const labels = data.ping_history.map(h => {
+                        const date = new Date(h.timestamp);
+                        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
+                    });
+                    
+                    const pingData = data.ping_history.map(h => h.ping || 0);
+                    
+                    // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
+                    const filteredPingData = pingData.map(value => value > 0 ? value : null);
+                    
+                    // Only update the ping dataset, keep RPC data as is
+                    latencyChart.data.labels = labels;
+                    latencyChart.data.datasets[0].data = filteredPingData;
+                    
+                    // Ajuster l'échelle du graphique
+                    adjustChartScale();
+                    
+                    latencyChart.update('none'); // Mettre à jour sans animation pour un rendu plus fluide
+                }
+            })
+            .catch(error => console.error('Error updating ping chart:', error));
+    }
+    
+    // Modifier la fonction updateData() pour inclure la mise à jour des alertes
+    function updateData() {
+        console.log("Updating data...");
+        document.getElementById('sync-status').textContent = 'Synchronizing...';
+        
+        fetch('/api/data')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log("Data received:", data);
                 
                 // Update server status
                 const serverStatusElement = document.getElementById('server-status');
@@ -488,301 +803,19 @@ function updateData() {
                     latencyChart.data.labels = labels;
                     latencyChart.data.datasets[0].data = filteredPingData;
                     latencyChart.data.datasets[1].data = rpcData;
+                    
+                    // Ajuster l'échelle du graphique
+                    adjustChartScale();
+                    
                     latencyChart.update();
                 }
                 
-                   // Update alerts
-            updateAlerts(data.alerts);
-            
-            document.getElementById('sync-status').textContent = 'Synchronised';
-        })
-        .catch(error => {
-            console.error('Error fetching data:', error);
-            document.getElementById('sync-status').textContent = 'Sync Error';
-        });
-
-    }
-    
-    // Function to update a status
-    function updateStatus(elementId, status) {
-        const element = document.getElementById(elementId);
-        element.textContent = status;
-        element.className = 'status-value';
-        
-        if (status === 'online' || status === 'success') {
-            element.classList.add('online');
-        } else if (status === 'offline' || status === 'failed') {
-            element.classList.add('offline');
-        } else if (status === 'warning') {
-            element.classList.add('warning');
-        } else if (status === 'error') {
-            element.classList.add('error');
-        }
-    }
-    
-   // Modifiez la fonction updatePorts() pour mieux gérer les données manquantes
-function updatePorts(ports) {
-    const container = document.getElementById('ports-status');
-    container.innerHTML = '';
-    
-    if (!ports || Object.keys(ports).length === 0) {
-        container.innerHTML = '<div class="no-ports">No port data available</div>';
-        return;
-    }
-    
-    for (const [port, status] of Object.entries(ports)) {
-        const portElement = document.createElement('div');
-        portElement.className = `port-item ${status}`;
-        portElement.textContent = `${port}: ${status}`;
-        container.appendChild(portElement);
-    }
-}
-    
-   // Fonction pour mettre à jour les alertes
-function updateAlerts(alerts) {
-    const container = document.getElementById('alerts-container');
-    const currentAlertCount = container.querySelectorAll('.alert-item').length;
-    
-    container.innerHTML = '';
-    
-    if (alerts.length === 0) {
-        container.innerHTML = '<div class="no-alerts">No alerts</div>';
-        return;
-    }
-    
-    // Ajouter un bouton pour tout effacer
-    const clearAllBtn = document.createElement('div');
-    clearAllBtn.className = 'clear-all-btn';
-    clearAllBtn.innerHTML = '<i class="fas fa-trash"></i> Clear All';
-    clearAllBtn.onclick = clearAllAlerts;
-    container.appendChild(clearAllBtn);
-    
-    alerts.forEach((alert, index) => {
-        const alertElement = document.createElement('div');
-        alertElement.className = `alert-item ${alert.severity}`;
-        alertElement.dataset.index = index;
-        
-        // Ajouter la classe 'new' aux alertes qui viennent d'apparaître
-        if (index >= currentAlertCount) {
-            alertElement.classList.add('new');
-        }
-        
-        let iconClass = 'info';
-        if (alert.severity === 'warning') iconClass = 'warning';
-        else if (alert.severity === 'critical') iconClass = 'critical';
-        
-        // Calculer le temps restant avant expiration
-        let timeRemaining = '';
-        if (alert.timestamp) {
-            const now = Date.now() / 1000; // Convertir en secondes
-            const elapsed = now - alert.timestamp;
-            const remaining = Math.max(0, 1800 - elapsed); // 30 minutes = 1800 secondes
-            
-            if (remaining > 0) {
-                const minutes = Math.floor(remaining / 60);
-                const seconds = Math.floor(remaining % 60);
-                timeRemaining = `<div class="alert-timer" data-index="${index}">Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}</div>`;
-            }
-        }
-        
-        alertElement.innerHTML = `
-            <div class="alert-header">
-                <div class="alert-icon ${iconClass}">
-                    <i class="fas fa-${iconClass === 'info' ? 'info-circle' : iconClass === 'warning' ? 'exclamation-triangle' : 'times-circle'}"></i>
-                </div>
-                <div class="alert-actions">
-                    <div class="alert-type">${alert.type}</div>
-                    <div class="alert-close" onclick="dismissAlert(${index})">
-                        <i class="fas fa-times"></i>
-                    </div>
-                </div>
-            </div>
-            <div class="alert-content">
-                <div class="alert-message">${alert.message}</div>
-                ${timeRemaining}
-            </div>
-        `;
-        
-        container.appendChild(alertElement);
-    });
-    
-    // Démarrer le compte à rebours pour les alertes
-    startAlertTimers();
-}
-
-// Fonction pour supprimer une alerte individuelle
-function dismissAlert(index) {
-    fetch('/api/dismiss_alert', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ index: index })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            updateAlerts(data.alerts);
-            showNotification('Alert dismissed', 'success');
-        }
-    })
-    .catch(error => {
-        console.error('Error dismissing alert:', error);
-        showNotification('Error dismissing alert', 'error');
-    });
-}
-
-// Fonction pour supprimer toutes les alertes
-function clearAllAlerts() {
-    if (confirm('Are you sure you want to clear all alerts?')) {
-        fetch('/api/clear_alerts', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateAlerts([]);
-                showNotification('All alerts cleared', 'success');
-            }
-        })
-        .catch(error => {
-            console.error('Error clearing alerts:', error);
-            showNotification('Error clearing alerts', 'error');
-        });
-    }
-}
-
-// Fonction pour gérer les compte à rebours
-function startAlertTimers() {
-    // Mettre à jour les compte à rebours toutes les secondes
-    setInterval(() => {
-        const timers = document.querySelectorAll('.alert-timer');
-        timers.forEach(timer => {
-            const index = parseInt(timer.dataset.index);
-            
-            // Récupérer les données d'alerte mises à jour
-            fetch('/api/data')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.alerts && data.alerts[index]) {
-                        const alert = data.alerts[index];
-                        const now = Date.now() / 1000;
-                        const elapsed = now - alert.timestamp;
-                        const remaining = Math.max(0, 1800 - elapsed);
-                        
-                        if (remaining > 0) {
-                            const minutes = Math.floor(remaining / 60);
-                            const seconds = Math.floor(remaining % 60);
-                            timer.textContent = `Expires in: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-                            
-                            // Changer la couleur quand il reste moins de 5 minutes
-                            if (remaining < 300) {
-                                timer.style.color = '#ff9800';
-                            }
-                            if (remaining < 60) {
-                                timer.style.color = '#f44336';
-                            }
-                        } else {
-                            // L'alerte a expiré, la supprimer
-                            const alertItem = timer.closest('.alert-item');
-                            if (alertItem) {
-                                alertItem.style.opacity = '0';
-                                setTimeout(() => alertItem.remove(), 300);
-                            }
-                        }
-                    }
-                });
-        });
-    }, 1000);
-}
-
-// Fonction pour afficher des notifications
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-            <span>${message}</span>
-        </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Animation d'apparition
-    setTimeout(() => notification.classList.add('show'), 10);
-    
-    // Disparaître après 3 secondes
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
-
-    
-    // Function to update chart
-    function updateChart(history) {
-        if (!history || history.length === 0) return;
-        
-        const labels = history.map(h => {
-            const date = new Date(h.timestamp);
-            return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-        });
-        
-        const pingData = history.map(h => h.ping || 0);
-        const rpcData = history.map(h => {
-            // Convert from seconds to milliseconds if needed
-            return (h.rpc || 0) < 1 ? (h.rpc || 0) * 1000 : (h.rpc || 0);
-        });
-        
-        // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
-        const filteredPingData = pingData.map(value => value > 0 ? value : null);
-        
-        latencyChart.data.labels = labels;
-        latencyChart.data.datasets[0].data = filteredPingData;
-        latencyChart.data.datasets[1].data = rpcData;
-        latencyChart.update();
-    }
-    
-    // Function to update ping chart in real-time
-    function updatePingChart() {
-        fetch('/api/data')
-            .then(response => response.json())
-            .then(data => {
-                // Mettre à jour les valeurs de ping en temps réel
-                if (data.ping_value !== null && data.ping_value !== undefined && data.ping_value > 0) {
-                    document.getElementById('ping-metric').textContent = `${data.ping_value.toFixed(2)} ms`;
-                } else {
-                    // Si pas de valeur valide, afficher "No data"
-                    document.getElementById('ping-metric').textContent = 'No data';
-                }
-                
-                // Mettre à jour le statut
-                updateStatus('ping-status', data.ping_status);
-                
-                // Mettre à jour le graphique avec l'historique du ping
-                if (data.ping_history && data.ping_history.length > 0) {
-                    const labels = data.ping_history.map(h => {
-                        const date = new Date(h.timestamp);
-                        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
-                    });
-                    
-                    const pingData = data.ping_history.map(h => h.ping || 0);
-                    
-                    // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
-                    const filteredPingData = pingData.map(value => value > 0 ? value : null);
-                    
-                    // Only update the ping dataset, keep RPC data as is
-                    latencyChart.data.labels = labels;
-                    latencyChart.data.datasets[0].data = filteredPingData;
-                    latencyChart.update('none'); // Mettre à jour sans animation pour un rendu plus fluide
-                }
+                document.getElementById('sync-status').textContent = 'Synchronised';
             })
-            .catch(error => console.error('Error updating ping chart:', error));
+            .catch(error => {
+                console.error('Error fetching data:', error);
+                document.getElementById('sync-status').textContent = 'Sync Error';
+            });
     }
     
     // Initial update

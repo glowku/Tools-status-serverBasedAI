@@ -428,6 +428,8 @@ def get_dns_serial():
             patterns = [
                 r'serial\s*=\s*(\d+)',
                 r'serial\s*(\d+)',
+                r'serial\s*=\s*(\d+)\s*',
+                r'serial\s*(\d+)\s*',
             ]
             
             for pattern in patterns:
@@ -438,9 +440,11 @@ def get_dns_serial():
                     last_dns_serial = serial
                     return serial
             
-            serial_match = re.search(r'\b(\d{10})\b', response.stdout)
-            if serial_match:
-                serial = serial_match.group(1)
+            # Chercher spécifiquement le format "serial = 2025081401"
+            serial_pattern = r'serial\s*=\s*(\d{10})'
+            match = re.search(serial_pattern, response.stdout)
+            if match:
+                serial = match.group(1)
                 logging.info(f"DNS serial found (10 digits format): {serial}")
                 last_dns_serial = serial
                 return serial
