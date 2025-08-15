@@ -688,13 +688,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 const seconds = String(date.getSeconds()).padStart(2, '0');
                 return `${hours}:${minutes}:${seconds}`;
             } else if (unit === 'minutes') {
+                // Pour les minutes, afficher seulement une étiquette par minute unique
                 const hours = String(date.getHours()).padStart(2, '0');
                 const minutes = String(date.getMinutes()).padStart(2, '0');
                 return `${hours}:${minutes}`;
             } else if (unit === 'hours') {
+                // Pour les heures, afficher seulement une étiquette par heure unique
                 const hours = String(date.getHours()).padStart(2, '0');
                 return `${hours}:00`;
             } else if (unit === 'days') {
+                // Pour les jours, afficher seulement une étiquette par jour unique
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
                 return `${month}-${day}`;
@@ -715,14 +718,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateCurrentTime() {
         const now = new Date();
         
-        // Obtenir l'heure UTC
-        const utcYear = now.getUTCFullYear();
-        const utcMonth = String(now.getUTCMonth() + 1).padStart(2, '0');
-        const utcDay = String(now.getUTCDate()).padStart(2, '0');
-        const utcHours = String(now.getUTCHours()).padStart(2, '0');
-        const utcMinutes = String(now.getUTCMinutes()).padStart(2, '0');
-        const utcSeconds = String(now.getUTCSeconds()).padStart(2, '0');
-        
         // Obtenir l'heure locale
         const localYear = now.getFullYear();
         const localMonth = String(now.getMonth() + 1).padStart(2, '0');
@@ -731,17 +726,54 @@ document.addEventListener('DOMContentLoaded', function() {
         const localMinutes = String(now.getMinutes()).padStart(2, '0');
         const localSeconds = String(now.getSeconds()).padStart(2, '0');
         
-        // Afficher les deux heures
-        const utcTimeString = `${utcYear}-${utcMonth}-${utcDay} ${utcHours}:${utcMinutes}:${utcSeconds} UTC`;
+        // Afficher l'heure locale
         const localTimeString = `${localYear}-${localMonth}-${localDay} ${localHours}:${localMinutes}:${localSeconds}`;
         
-        // Mettre à jour l'élément avec les deux heures
-        document.getElementById('last-check').innerHTML = `
-            <div class="time-display">
-                <div class="utc-time">${utcTimeString}</div>
-                <div class="local-time">${localTimeString}</div>
-            </div>
-        `;
+        // Mettre à jour l'élément avec l'heure locale
+        document.getElementById('last-check').textContent = localTimeString;
+    }
+    
+    // Fonction pour obtenir des étiquettes uniques en fonction de l'unité
+    function getUniqueLabels(data, unit) {
+        if (!data || data.length === 0) return [];
+        
+        const uniqueLabels = new Map();
+        
+        data.forEach(item => {
+            const date = new Date(item.timestamp);
+            let label;
+            
+            if (unit === 'seconds') {
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                label = `${hours}:${minutes}:${seconds}`;
+            } else if (unit === 'minutes') {
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                label = `${hours}:${minutes}`;
+            } else if (unit === 'hours') {
+                const hours = String(date.getHours()).padStart(2, '0');
+                label = `${hours}:00`;
+            } else if (unit === 'days') {
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                label = `${month}-${day}`;
+            } else {
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                label = `${hours}:${minutes}:${seconds}`;
+            }
+            
+            // Stocker la première valeur pour chaque étiquette unique
+            if (!uniqueLabels.has(label)) {
+                uniqueLabels.set(label, item.ping || 0);
+            }
+        });
+        
+        // Convertir la Map en tableau d'objets {label, value}
+        return Array.from(uniqueLabels, ([label, value]) => ({ label, value }));
     }
     
     // Function to update ping chart in real-time - CORRIGÉE
@@ -767,18 +799,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Récupérer l'unité sélectionnée
                     const selectedUnit = document.getElementById('interval-unit').value;
                     
-                    const labels = data.ping_history.map((h, index) => {
-                        return formatChartLabel(h.timestamp, selectedUnit, index, data.ping_history.length);
-                    });
+                    // Obtenir des étiquettes uniques et les valeurs correspondantes
+                    const uniqueData = getUniqueLabels(data.ping_history, selectedUnit);
                     
-                    const pingData = data.ping_history.map(h => h.ping || 0);
-                    
-                    // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
-                    const filteredPingData = pingData.map(value => value > 0 ? value : null);
+                    const labels = uniqueData.map(item => item.label);
+                    const pingData = uniqueData.map(item => item.value);
                     
                     // Mettre à jour les données du graphique
                     latencyChart.data.labels = labels;
-                    latencyChart.data.datasets[0].data = filteredPingData;
+                    latencyChart.data.datasets[0].data = pingData;
                     
                     // Ajuster l'échelle du graphique
                     adjustChartScale();
@@ -786,7 +815,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Forcer un redessin complet du graphique
                     latencyChart.update('active');
                     
-                    console.log("Chart updated successfully with", filteredPingData.length, "data points");
+                    console.log("Chart updated successfully with", pingData.length, "unique data points");
                 }
             })
             .catch(error => console.error('Error updating ping chart:', error));
@@ -865,7 +894,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
                 document.getElementById('security').textContent = data.security_info || 'N/A';
                 
-                // Update last check with both UTC and local time - CORRIGÉ
+                // Update last check with local time format - CORRIGÉ
                 updateCurrentTime();
                 
                 // Update TXT Records
@@ -921,22 +950,53 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Récupérer l'unité sélectionnée
                     const selectedUnit = document.getElementById('interval-unit').value;
                     
-                    const labels = data.history.map((h, index) => {
-                        return formatChartLabel(h.timestamp, selectedUnit, index, data.history.length);
-                    });
+                    // Obtenir des étiquettes uniques et les valeurs correspondantes
+                    const uniqueData = getUniqueLabels(data.history, selectedUnit);
                     
-                    const pingData = data.history.map(h => h.ping || 0);
-                    const rpcData = data.history.map(h => {
-                        // Convert from seconds to milliseconds if needed
-                        return (h.rpc || 0) < 1 ? (h.rpc || 0) * 1000 : (h.rpc || 0);
+                    const labels = uniqueData.map(item => item.label);
+                    const pingData = uniqueData.map(item => item.value);
+                    const rpcData = uniqueData.map(item => {
+                        // Trouver la valeur RPC correspondante dans les données originales
+                        const originalItem = data.history.find(h => {
+                            const date = new Date(h.timestamp);
+                            let label;
+                            
+                            if (selectedUnit === 'seconds') {
+                                const hours = String(date.getHours()).padStart(2, '0');
+                                const minutes = String(date.getMinutes()).padStart(2, '0');
+                                const seconds = String(date.getSeconds()).padStart(2, '0');
+                                label = `${hours}:${minutes}:${seconds}`;
+                            } else if (selectedUnit === 'minutes') {
+                                const hours = String(date.getHours()).padStart(2, '0');
+                                const minutes = String(date.getMinutes()).padStart(2, '0');
+                                label = `${hours}:${minutes}`;
+                            } else if (selectedUnit === 'hours') {
+                                const hours = String(date.getHours()).padStart(2, '0');
+                                label = `${hours}:00`;
+                            } else if (selectedUnit === 'days') {
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const day = String(date.getDate()).padStart(2, '0');
+                                label = `${month}-${day}`;
+                            } else {
+                                const hours = String(date.getHours()).padStart(2, '0');
+                                const minutes = String(date.getMinutes()).padStart(2, '0');
+                                const seconds = String(date.getSeconds()).padStart(2, '0');
+                                label = `${hours}:${minutes}:${seconds}`;
+                            }
+                            
+                            return label === item.label;
+                        });
+                        
+                        return originalItem ? (originalItem.rpc || 0) < 1 ? (originalItem.rpc || 0) * 1000 : (originalItem.rpc || 0) : 0;
                     });
                     
                     // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
                     const filteredPingData = pingData.map(value => value > 0 ? value : null);
+                    const filteredRpcData = rpcData.map(value => value > 0 ? value : null);
                     
                     latencyChart.data.labels = labels;
                     latencyChart.data.datasets[0].data = filteredPingData;
-                    latencyChart.data.datasets[1].data = rpcData;
+                    latencyChart.data.datasets[1].data = filteredRpcData;
                     
                     // Ajuster l'échelle du graphique
                     adjustChartScale();
@@ -963,7 +1023,7 @@ document.addEventListener('DOMContentLoaded', function() {
     pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
     
     // Mettre à jour l'heure actuelle toutes les minutes
-    timeUpdateInterval = setInterval(updateCurrentTime, 30000); // 60000ms = 1 minute
+    timeUpdateInterval = setInterval(updateCurrentTime, 60000); // 60000ms = 1 minute
     
     // Mettre à jour l'heure immédiatement au démarrage
     updateCurrentTime();
