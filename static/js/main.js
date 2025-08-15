@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let pingUpdateInterval;
     let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
     
-    // Handle update interval
+    // Handle update interval - CORRIGÉ
     document.getElementById('apply-interval').addEventListener('click', function() {
         const unit = document.getElementById('interval-unit').value;
         
@@ -381,6 +381,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (pingUpdateInterval) {
             clearInterval(pingUpdateInterval);
         }
+        
+        // Créer le nouvel intervalle
         pingUpdateInterval = setInterval(updatePingChart, chartUpdateInterval);
         
         // Afficher un message de confirmation
@@ -398,6 +400,14 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Forcer une mise à jour immédiate du graphique
         updatePingChart();
+        
+        // Forcer un redessin complet du graphique après un court délai
+        setTimeout(() => {
+            if (latencyChart) {
+                latencyChart.update('active');
+                console.log("Chart forcefully redrawn");
+            }
+        }, 100);
     });
     
     // Function to update a status
@@ -620,7 +630,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 3000);
     }
     
-    // Function to update ping chart in real-time
+    // Fonction pour formater la date en UTC - CORRIGÉE
+    function formatUTCDate(dateString) {
+        if (!dateString) return 'N/A';
+        
+        try {
+            const date = new Date(dateString);
+            // Vérifier si la date est valide
+            if (isNaN(date.getTime())) return 'N/A';
+            
+            // Utiliser toISOString pour obtenir l'UTC correct
+            const isoString = date.toISOString();
+            // Formater comme "YYYY-MM-DD HH:MM:SS UTC"
+            return isoString.replace('T', ' ').substring(0, 19) + ' UTC';
+        } catch (e) {
+            console.error('Error formatting date:', e);
+            return dateString;
+        }
+    }
+    
+    // Function to update ping chart in real-time - CORRIGÉE
     function updatePingChart() {
         console.log("Updating ping chart with interval:", chartUpdateInterval, "ms");
         
@@ -642,7 +671,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.ping_history && data.ping_history.length > 0) {
                     const labels = data.ping_history.map(h => {
                         const date = new Date(h.timestamp);
-                        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
+                        // Formater en UTC correctement
+                        const isoString = date.toISOString();
+                        const timePart = isoString.split('T')[1].substring(0, 8);
+                        return `${timePart} UTC`;
                     });
                     
                     const pingData = data.ping_history.map(h => h.ping || 0);
@@ -650,15 +682,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Filtrer les valeurs 0 pour éviter d'afficher des lignes à 0
                     const filteredPingData = pingData.map(value => value > 0 ? value : null);
                     
-                    // Only update the ping dataset, keep RPC data as is
+                    // Mettre à jour les données du graphique
                     latencyChart.data.labels = labels;
                     latencyChart.data.datasets[0].data = filteredPingData;
                     
                     // Ajuster l'échelle du graphique
                     adjustChartScale();
                     
-                    // Mettre à jour sans animation pour un rendu plus fluide
-                    latencyChart.update('none');
+                    // Forcer un redessin complet du graphique
+                    latencyChart.update('active');
+                    
+                    console.log("Chart updated successfully with", filteredPingData.length, "data points");
                 }
             })
             .catch(error => console.error('Error updating ping chart:', error));
@@ -667,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Variable pour suivre le dernier timestamp des données
     let lastDataTimestamp = null;
     
-    // Modifier la fonction updateData() pour inclure la mise à jour des alertes
+    // Modifier la fonction updateData() pour inclure la mise à jour des alertes - CORRIGÉE
     function updateData() {
         console.log("Updating data...");
         document.getElementById('sync-status').textContent = 'Synchronizing...';
@@ -736,7 +770,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('ip-domain').textContent = data.main_domain_info?.ip || 'N/A';
                 document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
                 document.getElementById('security').textContent = data.security_info || 'N/A';
-                document.getElementById('last-check').textContent = data.last_check;
+                
+                // Update last check with UTC format - CORRIGÉ
+                document.getElementById('last-check').textContent = formatUTCDate(data.last_check);
                 
                 // Update TXT Records
                 const txtContainer = document.getElementById('txt-records');
@@ -790,7 +826,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.history && data.history.length > 0) {
                     const labels = data.history.map(h => {
                         const date = new Date(h.timestamp);
-                        return `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+                        // Formater en UTC correctement
+                        const isoString = date.toISOString();
+                        const timePart = isoString.split('T')[1].substring(0, 8);
+                        return `${timePart} UTC`;
                     });
                     
                     const pingData = data.history.map(h => h.ping || 0);
@@ -809,7 +848,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Ajuster l'échelle du graphique
                     adjustChartScale();
                     
-                    latencyChart.update();
+                    // Forcer un redessin complet du graphique
+                    latencyChart.update('active');
                 }
                 
                 document.getElementById('sync-status').textContent = 'Synchronised';
