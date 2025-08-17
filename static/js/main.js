@@ -324,6 +324,11 @@ document.getElementById('status-button').addEventListener('click', function() {
     // Fonction pour mettre à jour les alertes - CORRIGÉE
     function updateAlerts(alerts) {
         const container = document.getElementById('alerts-container');
+
+        // Réinitialiser les alertes existantes si nécessaire
+if (alerts.length > 0 && !existingAlerts.some(alert => alert.isRPCDowntime || alert.isBlockDowntime)) {
+    existingAlerts = [];
+}
         
         // Si le conteneur est vide, initialiser avec un titre
         if (container.children.length === 0) {
