@@ -2,15 +2,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize Three.js background with particles and rotating cube
     initThreeJSBackground();
     
-    // Handle menu navigation
-    document.getElementById('easy-node-button').addEventListener('click', function() {
-        window.location.href = 'index.html';
-    });
-    
-    document.getElementById('status-button').addEventListener('click', function() {
-        window.open('https://tools-status-serverbasedai.onrender.com/', '_blank');
-    });
-    
+  // Handle menu navigation
+document.getElementById('easy-node-button').addEventListener('click', function() {
+    window.location.href = 'https://based-node-installer.onrender.com/index.html';
+});
+
+document.getElementById('monitor-button').addEventListener('click', function() {
+    window.location.href = 'https://based-node-installer.onrender.com/monitor.html';
+});
+
+document.getElementById('status-button').addEventListener('click', function() {
+    window.location.href = 'https://tools-status-serverbasedai.onrender.com/';
+});
     // Handle menu visibility on scroll
     const menuBar = document.getElementById('menu-bar');
     let lastScrollTop = 0;
@@ -394,12 +397,8 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Filtrer les alertes pour supprimer l'alerte jaune indésirable et les transitions "offline → online"
         const filteredAlerts = alerts.filter(alert => {
-            // Supprimer l'alerte jaune spécifique avec la date exacte
-            if (alert.type === 'RPC' && alert.message.includes('RPC is down since 2025-08-17 18:52:51')) {
-                return false;
-            }
-            // Supprimer toutes les alertes RPC qui commencent par "RPC is down since"
-            if (alert.type === 'RPC' && alert.message.startsWith('RPC is down since')) {
+            // Supprimer l'alerte spécifique "RPC is down since 2025-08-17 18:52:51"
+            if (alert.message.includes('RPC is down since 2025-08-17 18:52:51')) {
                 return false;
             }
             // Supprimer uniquement les alertes de transition RPC "offline → online"
@@ -412,7 +411,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Mettre à jour les autres alertes
         filteredAlerts.forEach(newAlert => {
             // Ignorer les alertes que nous gérons séparément
-            if ((newAlert.type === 'RPC' && newAlert.message.includes('RPC is offline since')) ||
+            if ((newAlert.type === 'RPC' && newAlert.message.includes('RPC is down since')) ||
                 (newAlert.type === 'Block' && newAlert.message.includes('Last block was mined'))) {
                 return;
             }
@@ -898,11 +897,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Mettre à jour le timestamp
                 lastDataTimestamp = currentTimestamp;
                 
-                // Update server status - Force to offline as per user request
+                // Update server status - Set to online as per user request
                 const serverStatusElement = document.getElementById('server-status');
                 const serverStatusText = document.getElementById('server-status-text');
-                serverStatusElement.className = 'server-status offline';
-                serverStatusText.textContent = 'Server Offline';
+                serverStatusElement.className = 'server-status online';
+                serverStatusText.textContent = 'Server Online';
                 
                 // Update main statuses
                 updateStatus('rpc-status', data.rpc_status);
