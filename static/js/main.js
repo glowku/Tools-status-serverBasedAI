@@ -395,18 +395,40 @@ document.getElementById('status-button').addEventListener('click', function() {
             existingAlerts.push(blockDowntimeAlert);
         }
         
-        // Filtrer les alertes pour supprimer l'alerte jaune indésirable et les transitions "offline → online"
-        const filteredAlerts = alerts.filter(alert => {
-            // Supprimer l'alerte spécifique "RPC is down since 2025-08-17 18:52:51"
-            if (alert.message.includes('RPC is down since 2025-08-17 18:52:51')) {
-                return false;
-            }
-            // Supprimer uniquement les alertes de transition RPC "offline → online"
-            if (alert.type === 'RPC' && alert.message.includes('offline → online')) {
-                return false;
-            }
-            return true;
-        });
+        // Dans la fonction updateAlerts, remplacez le bloc de filtrage existant par celui-ci :
+
+// Filtrer les alertes pour supprimer l'alerte jaune indésirable et les transitions "offline → online"
+const filteredAlerts = alerts.filter(alert => {
+    // Supprimer l'alerte spécifique "RPC is down since 2025-08-17 18:52:51"
+    if (alert.message.includes('RPC is down since 2025-08-17 18:52:51')) {
+        return false;
+    }
+    
+    // Supprimer toutes les alertes de type RPC avec sévérité "warning" qui contiennent "RPC is down since"
+    if (alert.type === 'RPC' && alert.severity === 'warning' && alert.message.includes('RPC is down since')) {
+        return false;
+    }
+    
+    // Supprimer uniquement les alertes de transition RPC "offline → online"
+    if (alert.type === 'RPC' && alert.message.includes('offline → online')) {
+        return false;
+    }
+    
+    return true;
+});
+
+// Ajoutez ce bloc supplémentaire après la création des alertes RPC et Block :
+
+// Filtrer à nouveau les alertes existantes pour supprimer les doublons ou les indésirables
+existingAlerts = existingAlerts.filter(alert => {
+    // Supprimer les alertes de type RPC avec sévérité "warning" qui contiennent "RPC is down since"
+    if (alert.type === 'RPC' && alert.severity === 'warning' && alert.message.includes('RPC is down since')) {
+        return false;
+    }
+    
+    // Conserver toutes les autres alertes
+    return true;
+});
         
         // Mettre à jour les autres alertes
         filteredAlerts.forEach(newAlert => {
