@@ -26,8 +26,8 @@ body {
     color: var(--text-color);
     overflow-x: hidden;
     min-height: 100vh;
+    padding-top: 400px;
 }
-
 /* Arrière-plan unifié */
 #unified-background {
     position: fixed;
@@ -39,7 +39,6 @@ body {
     background: linear-gradient(135deg, #0a0a1a 0%, #0a0a2a 50%, #0a0a1a 100%);
     overflow: hidden;
 }
-
 .menu-bar {
     position: fixed;
     top: 0;
@@ -75,11 +74,18 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 180px;
+    justify-content: center;
 }
 .menu-button:hover {
     background: rgba(0, 255, 255, 0.2);
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(0, 255, 255, 0.2);
+}
+.menu-button.active {
+    background: rgba(0, 255, 255, 0.3);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
 }
 .menu-button.disabled {
     opacity: 0.5;
@@ -459,6 +465,10 @@ body {
     background: rgba(255, 0, 0, 0.1);
     border-left: 4px solid var(--danger-color);
 }
+.alert-item.resolved {
+    background: rgba(0, 255, 0, 0.1);
+    border-left: 4px solid var(--success-color);
+}
 .alert-icon {
     font-size: 1.5rem;
 }
@@ -471,23 +481,22 @@ body {
 .alert-icon.critical {
     color: var(--danger-color);
 }
+.alert-icon.resolved {
+    color: var(--success-color);
+}
 .no-alerts {
     text-align: center;
     padding: 30px;
     color: var(--secondary-color);
     font-style: italic;
 }
-
-
 /* Styles pour les alertes améliorées */
 .alerts-section {
     margin-top: 30px;
 }
-
 .alerts-container {
     margin-top: 15px;
 }
-
 .clear-all-btn {
     background: rgba(244, 67, 54, 0.2);
     border: 1px solid rgba(244, 67, 54, 0.5);
@@ -501,12 +510,10 @@ body {
     font-family: 'Orbitron', monospace;
     font-size: 0.9em;
 }
-
 .clear-all-btn:hover {
     background: rgba(244, 67, 54, 0.3);
     transform: translateY(-2px);
 }
-
 .alert-item {
     position: relative;
     padding: 15px;
@@ -518,31 +525,26 @@ body {
     transition: all 0.3s ease;
     opacity: 1;
 }
-
 .alert-item.new {
     animation: slideIn 0.5s ease;
 }
-
 .alert-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
 }
-
 .alert-actions {
     display: flex;
     align-items: center;
     gap: 10px;
 }
-
 .alert-type {
     font-size: 0.8em;
     color: #888;
     font-family: 'Orbitron', monospace;
     text-transform: uppercase;
 }
-
 .alert-close {
     cursor: pointer;
     color: #888;
@@ -550,21 +552,17 @@ body {
     padding: 5px;
     border-radius: 50%;
 }
-
 .alert-close:hover {
     color: #fff;
     background: rgba(255, 255, 255, 0.1);
 }
-
 .alert-content {
     flex: 1;
 }
-
 .alert-message {
     margin-bottom: 8px;
     line-height: 1.4;
 }
-
 .alert-timer {
     font-size: 0.8em;
     color: #888;
@@ -572,26 +570,26 @@ body {
     font-family: 'Orbitron', monospace;
     transition: color 0.3s ease;
 }
-
 .alert-item.warning {
     border-left-color: #ff9800;
 }
-
 .alert-item.critical {
     border-left-color: #f44336;
 }
-
 .alert-item.info {
     border-left-color: #2196f3;
 }
-
-.no-alerts {
-    text-align: center;
-    color: #888;
-    padding: 20px;
-    font-style: italic;
+.alert-item.resolved {
+    border-left-color: #4caf50;
 }
-
+.rpc-downtime-duration {
+    color: #ffc107;
+    font-weight: bold;
+}
+.resolved-info {
+    color: #4caf50;
+    font-weight: bold;
+}
 /* Animations */
 @keyframes slideIn {
     from {
@@ -603,7 +601,6 @@ body {
         opacity: 1;
     }
 }
-
 @keyframes fadeOut {
     from {
         opacity: 1;
@@ -614,7 +611,6 @@ body {
         transform: scale(0.8);
     }
 }
-
 /* Notifications */
 .notification {
     position: fixed;
@@ -631,38 +627,30 @@ body {
     transition: all 0.3s ease;
     backdrop-filter: blur(10px);
 }
-
 .notification.show {
     opacity: 1;
     transform: translateY(0);
 }
-
 .notification.success {
     border-color: rgba(76, 175, 80, 0.5);
 }
-
 .notification.error {
     border-color: rgba(244, 67, 54, 0.5);
 }
-
 .notification-content {
     display: flex;
     align-items: center;
     gap: 10px;
 }
-
 .notification-content i {
     font-size: 1.2em;
 }
-
 .notification.success i {
     color: #4caf50;
 }
-
 .notification.error i {
     color: #f44336;
 }
-
 .notification.info i {
     color: #2196f3;
 }
@@ -753,9 +741,11 @@ body {
         align-items: flex-start;
         gap: 10px;
     }
+    
+    .menu-button {
+        min-width: 100%;
+    }
 }
-
-
 .rpc-down-indicator {
     margin-top: 8px;
     padding: 5px 8px;
@@ -766,7 +756,6 @@ body {
     display: flex;
     align-items: center;
 }
-
 .rpc-down-indicator i {
     margin-right: 8px;
 }

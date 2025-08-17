@@ -1,192 +1,15 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize unified background with particles and 3D cubes
-    function initUnifiedBackground() {
-        const container = document.getElementById('unified-background');
-        if (!container) return;
-        
-        // Créer un élément pour le dégradé radial
-        const gradientDiv = document.createElement('div');
-        gradientDiv.style.position = 'absolute';
-        gradientDiv.style.top = '0';
-        gradientDiv.style.left = '0';
-        gradientDiv.style.width = '100%';
-        gradientDiv.style.height = '100%';
-        gradientDiv.style.zIndex = '0';
-        gradientDiv.style.background = 'radial-gradient(circle at center, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))';
-        gradientDiv.style.backgroundSize = '200% 200%';
-        container.appendChild(gradientDiv);
-        
-        // Animer le dégradé
-        let angle = 0;
-        function animateGradient() {
-            angle += 0.5;
-            const x = 50 + 50 * Math.cos(angle * Math.PI / 180);
-            const y = 50 + 50 * Math.sin(angle * Math.PI / 180);
-            gradientDiv.style.background = `radial-gradient(circle at ${x}% ${y}%, rgba(0, 255, 255, 0.1), rgba(128, 128, 128, 0.05), rgba(0, 0, 0, 0.1))`;
-            requestAnimationFrame(animateGradient);
-        }
-        animateGradient();
-        
-        // Create canvas for particles
-        const particlesCanvas = document.createElement('canvas');
-        particlesCanvas.style.position = 'absolute';
-        particlesCanvas.style.top = '0';
-        particlesCanvas.style.left = '0';
-        particlesCanvas.style.width = '100%';
-        particlesCanvas.style.height = '100%';
-        particlesCanvas.style.zIndex = '1';
-        container.appendChild(particlesCanvas);
-        
-        // Create container for 3D scene
-        const threeContainer = document.createElement('div');
-        threeContainer.style.position = 'absolute';
-        threeContainer.style.top = '0';
-        threeContainer.style.left = '0';
-        threeContainer.style.width = '100%';
-        threeContainer.style.height = '100%';
-        threeContainer.style.zIndex = '2';
-        container.appendChild(threeContainer);
-        
-        // Initialize particles
-        const particlesCtx = particlesCanvas.getContext('2d');
-        particlesCanvas.width = window.innerWidth;
-        particlesCanvas.height = window.innerHeight;
-        
-        const particlesArray = [];
-        const numberOfParticles = 50;
-        
-        class Particle {
-            constructor() {
-                this.x = Math.random() * particlesCanvas.width;
-                this.y = Math.random() * particlesCanvas.height;
-                this.size = Math.random() * 2 + 1;
-                this.speedX = Math.random() * 1 - 0.5;
-                this.speedY = Math.random() * 1 - 0.5;
-                this.opacity = Math.random() * 0.5 + 0.2;
-            }
-            
-            update() {
-                this.x += this.speedX;
-                this.y += this.speedY;
-                
-                if (this.x > particlesCanvas.width || this.x < 0) {
-                    this.speedX = -this.speedX;
-                }
-                
-                if (this.y > particlesCanvas.height || this.y < 0) {
-                    this.speedY = -this.speedY;
-                }
-            }
-            
-            draw() {
-                particlesCtx.fillStyle = `rgba(0, 255, 255, ${this.opacity})`;
-                particlesCtx.beginPath();
-                particlesCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                particlesCtx.fill();
-            }
-        }
-        
-        // Create particles
-        for (let i = 0; i < numberOfParticles; i++) {
-            particlesArray.push(new Particle());
-        }
-        
-        // Draw connections between particles
-        function connectParticles() {
-            for (let a = 0; a < particlesArray.length; a++) {
-                for (let b = a; b < particlesArray.length; b++) {
-                    const dx = particlesArray[a].x - particlesArray[b].x;
-                    const dy = particlesArray[a].y - particlesArray[b].y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (distance < 100) {
-                        particlesCtx.strokeStyle = `rgba(0, 255, 255, ${0.1 * (1 - distance/100)})`;
-                        particlesCtx.lineWidth = 0.5;
-                        particlesCtx.beginPath();
-                        particlesCtx.moveTo(particlesArray[a].x, particlesArray[a].y);
-                        particlesCtx.lineTo(particlesArray[b].x, particlesArray[b].y);
-                        particlesCtx.stroke();
-                    }
-                }
-            }
-        }
-        
-        // Animation loop for particles
-        function animateParticles() {
-            particlesCtx.clearRect(0, 0, particlesCanvas.width, particlesCanvas.height);
-            
-            for (let i = 0; i < particlesArray.length; i++) {
-                particlesArray[i].update();
-                particlesArray[i].draw();
-            }
-            
-            connectParticles();
-            requestAnimationFrame(animateParticles);
-        }
-        
-        animateParticles();
-        
-        // Initialize 3D scene
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0x000000, 0);
-        threeContainer.appendChild(renderer.domElement);
-        
-        // Create 3D cubes
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({ 
-            color: 0x00ffff,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.1
-        });
-        
-        const cubes = [];
-        for (let i = 0; i < 10; i++) {
-            const cube = new THREE.Mesh(geometry, material);
-            cube.position.x = (Math.random() - 0.5) * 30;
-            cube.position.y = (Math.random() - 0.5) * 30;
-            cube.position.z = (Math.random() - 0.5) * 30;
-            cube.rotation.x = Math.random() * Math.PI;
-            cube.rotation.y = Math.random() * Math.PI;
-            scene.add(cube);
-            cubes.push(cube);
-        }
-        
-        camera.position.z = 20;
-        
-        // 3D Animation
-        function animate3D() {
-            requestAnimationFrame(animate3D);
-            
-            cubes.forEach(cube => {
-                cube.rotation.x += 0.003;
-                cube.rotation.y += 0.003;
-                
-                // Add movement to cubes
-                cube.position.x += Math.sin(Date.now() * 0.001 + cube.id) * 0.005;
-                cube.position.y += Math.cos(Date.now() * 0.001 + cube.id) * 0.005;
-            });
-            
-            renderer.render(scene, camera);
-        }
-        animate3D();
-        
-        // Handle resize
-        window.addEventListener('resize', function() {
-            particlesCanvas.width = window.innerWidth;
-            particlesCanvas.height = window.innerHeight;
-            
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    }
+    // Initialize Three.js background with particles and rotating cube
+    initThreeJSBackground();
     
-    // Initialize unified background
-    initUnifiedBackground();
+    // Handle menu navigation
+    document.getElementById('easy-node-button').addEventListener('click', function() {
+        window.location.href = 'index.html';
+    });
+    
+    document.getElementById('status-button').addEventListener('click', function() {
+        window.open('https://tools-status-serverbasedai.onrender.com/', '_blank');
+    });
     
     // Handle menu visibility on scroll
     const menuBar = document.getElementById('menu-bar');
@@ -220,7 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize latency chart
     const ctx = document.getElementById('latency-chart').getContext('2d');
     
-    // Ajoutez cette fonction pour ajuster dynamiquement l'échelle
+    // Fonction pour ajuster dynamiquement l'échelle
     function adjustChartScale() {
         // Récupérer toutes les valeurs de ping valides
         const pingValues = latencyChart.data.datasets[0].data.filter(v => v !== null && v > 0);
@@ -248,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function() {
         latencyChart.update('none'); // Mettre à jour sans animation
     }
     
-    // Remplacez la configuration du graphique par celle-ci
+    // Configuration du graphique
     const latencyChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -277,7 +100,6 @@ document.addEventListener('DOMContentLoaded', function() {
             maintainAspectRatio: false,
             scales: {
                 y: {
-                    // Supprimer le min/max fixe pour permettre l'adaptation automatique
                     title: {
                         display: true,
                         text: 'Latency (ms)',
@@ -349,7 +171,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let chartUpdateInterval = 2000; // Default ping chart update interval (2 seconds)
     let timeUpdateInterval; // Pour la mise à jour de l'heure toutes les minutes
     
-    // Handle update interval - CORRIGÉ
+    // Handle update interval
     document.getElementById('apply-interval').addEventListener('click', function() {
         const unit = document.getElementById('interval-unit').value;
         
@@ -454,15 +276,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const lastKnownBlock = {
         height: 1952248,
         size: 518,
-        timestamp: "Aug 12 2025 05:42:20 AM (+02:00 UTC)"
+        timestamp: "2025-08-12T05:42:20+02:00"
     };
     
     // Convertir le timestamp en objet Date
     const lastBlockDate = new Date(lastKnownBlock.timestamp);
     
-    // Variables pour le suivi de la panne RPC
-    let rpcDowntimeStart = lastBlockDate; // Utiliser la date du dernier bloc comme début de la panne
+    // Variables pour le suivi de la panne RPC - MODIFIÉ
+    const rpcDowntimeStart = new Date("2025-08-10T22:43:00+02:00"); // Date du premier down de transaction
     let rpcDowntimeAlert = null;
+    let blockDowntimeAlert = null;
     
     // Stockage des alertes existantes pour les mettre à jour plutôt que de les remplacer
     let existingAlerts = [];
@@ -495,181 +318,223 @@ document.addEventListener('DOMContentLoaded', function() {
         return result.trim();
     }
     
-    // Fonction pour mettre à jour les alertes
-
-// Fonction pour mettre à jour les alertes
-function updateAlerts(alerts) {
-    const container = document.getElementById('alerts-container');
-    
-    // Si le conteneur est vide, initialiser avec un titre
-    if (container.children.length === 0) {
-        const title = document.createElement('div');
-        title.className = 'alerts-title';
-        title.textContent = 'System Alerts';
-        container.appendChild(title);
-    }
-    
-    // Vérifier si l'alerte RPC de panne existe déjà
-    const rpcAlertIndex = existingAlerts.findIndex(alert => alert.id === 'rpc-downtime');
-    
-    // Vérifier si le RPC est actuellement en ligne
-    const rpcOnline = alerts.some(alert => 
-        alert.type === 'RPC' && 
-        alert.message.includes('online') && 
-        !alert.message.includes('offline → online')
-    );
-    
-    if (!rpcOnline && rpcAlertIndex === -1) {
-        // Créer l'alerte de panne RPC si elle n'existe pas et que le RPC est hors ligne
-        rpcDowntimeAlert = {
-            id: 'rpc-downtime',
-            type: 'RPC Downtime',
-            message: `RPC is offline since ${formatLocalDate(rpcDowntimeStart)}`,
-            severity: 'critical',
-            startTime: rpcDowntimeStart,
-            resolved: false,
-            endTime: null,
-            resolvedMessage: null,
-            isRPCDowntime: true
-        };
+    // Fonction pour mettre à jour les alertes - CORRIGÉE
+    function updateAlerts(alerts) {
+        const container = document.getElementById('alerts-container');
         
-        existingAlerts.push(rpcDowntimeAlert);
-    } else if (rpcOnline && rpcAlertIndex !== -1) {
-        // Si le RPC est de nouveau en ligne, mettre à jour l'alerte
-        const existingAlert = existingAlerts[rpcAlertIndex];
-        existingAlert.resolved = true;
-        existingAlert.endTime = new Date();
-        
-        const duration = existingAlert.endTime - existingAlert.startTime;
-        existingAlert.resolvedMessage = `RPC is back online. Downtime: ${formatDuration(duration)}`;
-        existingAlert.message = `RPC was offline from ${formatLocalDate(existingAlert.startTime)} to ${formatLocalDate(existingAlert.endTime)}`;
-        
-        // Réinitialiser le suivi de la panne
-        rpcDowntimeStart = null;
-        rpcDowntimeAlert = null;
-    }
-    
-    // Filtrer les alertes pour supprimer uniquement les transitions "offline → online"
-    const filteredAlerts = alerts.filter(alert => {
-        // Supprimer uniquement les alertes de transition RPC "offline → online"
-        if (alert.type === 'RPC' && alert.message.includes('offline → online')) {
-            return false;
-        }
-        return true;
-    });
-    
-    // Mettre à jour les autres alertes
-    filteredAlerts.forEach(newAlert => {
-        // Ignorer l'alerte de panne RPC car nous la gérons séparément
-        if (newAlert.type === 'RPC' && newAlert.message.includes('RPC is offline since')) {
-            return;
+        // Si le conteneur est vide, initialiser avec un titre
+        if (container.children.length === 0) {
+            const title = document.createElement('div');
+            title.className = 'alerts-title';
+            title.textContent = 'System Alerts';
+            container.appendChild(title);
         }
         
-        // Vérifier si une alerte similaire existe déjà
-        const existingAlertIndex = existingAlerts.findIndex(alert => 
-            alert.type === newAlert.type && alert.message.includes(newAlert.message.split(' ')[0])
+        // Définir la date correcte pour la panne RPC (10 août 2025 à 22:43:00 PM (+02:00 UTC))
+        const rpcDowntimeStart = new Date("2025-08-10T22:43:00+02:00");
+        
+        // Vérifier si le RPC est actuellement en ligne
+        const rpcOnline = alerts.some(alert => 
+            alert.type === 'RPC' && 
+            alert.message.includes('online') && 
+            !alert.message.includes('offline → online')
         );
         
-        if (existingAlertIndex !== -1) {
-            // Mettre à jour l'alerte existante
-            const existingAlert = existingAlerts[existingAlertIndex];
-            
-            // Si le statut a changé (par exemple, de offline à online)
-            if (existingAlert.status !== newAlert.status) {
-                // Marquer comme résolu si le nouveau statut est online
-                if (newAlert.status === 'online' || newAlert.status === 'success') {
-                    existingAlert.resolved = true;
-                    existingAlert.endTime = new Date();
-                    existingAlert.resolvedMessage = `Issue resolved at ${formatLocalDate(existingAlert.endTime)}`;
-                }
-            }
-            
-            // Mettre à jour les autres informations
-            existingAlert.status = newAlert.status;
-            existingAlert.severity = newAlert.severity;
-            existingAlert.timestamp = newAlert.timestamp;
-        } else {
-            // Créer une nouvelle alerte
-            const alert = {
-                ...newAlert,
-                id: Date.now() + Math.random(),
-                startTime: new Date(),
+        // Créer ou mettre à jour l'alerte de panne RPC
+        const rpcAlertIndex = existingAlerts.findIndex(alert => alert.id === 'rpc-downtime');
+        
+        if (!rpcOnline && rpcAlertIndex === -1) {
+            // Créer l'alerte de panne RPC si elle n'existe pas et que le RPC est hors ligne
+            rpcDowntimeAlert = {
+                id: 'rpc-downtime',
+                type: 'RPC Downtime',
+                message: `RPC Downtime last tx: ${formatLocalDate(rpcDowntimeStart)}`,
+                severity: 'critical',
+                startTime: rpcDowntimeStart,
                 resolved: false,
                 endTime: null,
-                resolvedMessage: null
+                resolvedMessage: null,
+                isRPCDowntime: true
             };
-            existingAlerts.push(alert);
-        }
-    });
-    
-    // Vider le conteneur sauf le titre
-    const title = container.querySelector('.alerts-title');
-    container.innerHTML = '';
-    if (title) container.appendChild(title);
-    
-    // Afficher toutes les alertes (y compris celles résolues)
-    existingAlerts.forEach(alert => {
-        const alertElement = document.createElement('div');
-        
-        // Déterminer la classe de l'alerte en fonction de son état
-        if (alert.resolved) {
-            alertElement.className = 'alert-item resolved';
-        } else {
-            alertElement.className = `alert-item ${alert.severity}`;
+            
+            existingAlerts.push(rpcDowntimeAlert);
+        } else if (rpcOnline && rpcAlertIndex !== -1) {
+            // Si le RPC est de nouveau en ligne, mettre à jour l'alerte
+            const existingAlert = existingAlerts[rpcAlertIndex];
+            existingAlert.resolved = true;
+            existingAlert.endTime = new Date();
+            
+            const duration = existingAlert.endTime - existingAlert.startTime;
+            existingAlert.resolvedMessage = `RPC is back online. Downtime: ${formatDuration(duration)}`;
+            existingAlert.message = `RPC was offline from ${formatLocalDate(existingAlert.startTime)} to ${formatLocalDate(existingAlert.endTime)}`;
+            
+            // Réinitialiser le suivi de la panne
+            rpcDowntimeAlert = null;
         }
         
-        // Déterminer l'icône
-        let iconClass = 'info';
-        if (alert.resolved) {
-            iconClass = 'check-circle';
-        } else if (alert.severity === 'warning') {
-            iconClass = 'exclamation-triangle';
-        } else if (alert.severity === 'critical') {
-            iconClass = 'times-circle';
+        // Créer ou mettre à jour l'alerte de dernier bloc
+        const blockAlertIndex = existingAlerts.findIndex(alert => alert.id === 'block-downtime');
+        
+        if (blockAlertIndex === -1) {
+            // Créer l'alerte de dernier bloc
+            blockDowntimeAlert = {
+                id: 'block-downtime',
+                type: 'Block Downtime',
+                message: `Last block was mined at ${formatLocalDate(lastBlockDate)}`,
+                severity: 'critical',
+                startTime: lastBlockDate,
+                resolved: false,
+                endTime: null,
+                resolvedMessage: null,
+                isBlockDowntime: true
+            };
+            
+            existingAlerts.push(blockDowntimeAlert);
         }
         
-        // Préparer le message
-        let message = alert.message;
-        if (alert.resolved && alert.resolvedMessage) {
-            message += `<br><span class="resolved-info">${alert.resolvedMessage}</span>`;
-        }
+        // Filtrer les alertes pour supprimer l'alerte jaune indésirable et les transitions "offline → online"
+        const filteredAlerts = alerts.filter(alert => {
+            // Supprimer l'alerte jaune spécifique avec la date exacte
+            if (alert.type === 'RPC' && alert.message.includes('RPC is down since 2025-08-17 18:52:51')) {
+                return false;
+            }
+            // Supprimer toutes les alertes RPC qui commencent par "RPC is down since"
+            if (alert.type === 'RPC' && alert.message.startsWith('RPC is down since')) {
+                return false;
+            }
+            // Supprimer uniquement les alertes de transition RPC "offline → online"
+            if (alert.type === 'RPC' && alert.message.includes('offline → online')) {
+                return false;
+            }
+            return true;
+        });
         
-        // Pour l'alerte de panne RPC, ajouter un compteur en temps réel si elle n'est pas résolue
-        if (alert.isRPCDowntime && !alert.resolved) {
-            const durationElement = document.createElement('span');
-            durationElement.className = 'rpc-downtime-duration';
-            durationElement.setAttribute('data-start', alert.startTime.getTime());
-            message += `<br><span class="rpc-downtime-duration" data-start="${alert.startTime.getTime()}">Calculating downtime...</span>`;
-        }
+        // Mettre à jour les autres alertes
+        filteredAlerts.forEach(newAlert => {
+            // Ignorer les alertes que nous gérons séparément
+            if ((newAlert.type === 'RPC' && newAlert.message.includes('RPC is offline since')) ||
+                (newAlert.type === 'Block' && newAlert.message.includes('Last block was mined'))) {
+                return;
+            }
+            
+            // Vérifier si une alerte similaire existe déjà
+            const existingAlertIndex = existingAlerts.findIndex(alert => 
+                alert.type === newAlert.type && alert.message.includes(newAlert.message.split(' ')[0])
+            );
+            
+            if (existingAlertIndex !== -1) {
+                // Mettre à jour l'alerte existante
+                const existingAlert = existingAlerts[existingAlertIndex];
+                
+                // Si le statut a changé (par exemple, de offline à online)
+                if (existingAlert.status !== newAlert.status) {
+                    // Marquer comme résolu si le nouveau statut est online
+                    if (newAlert.status === 'online' || newAlert.status === 'success') {
+                        existingAlert.resolved = true;
+                        existingAlert.endTime = new Date();
+                        existingAlert.resolvedMessage = `Issue resolved at ${formatLocalDate(existingAlert.endTime)}`;
+                    }
+                }
+                
+                // Mettre à jour les autres informations
+                existingAlert.status = newAlert.status;
+                existingAlert.severity = newAlert.severity;
+                existingAlert.timestamp = newAlert.timestamp;
+            } else {
+                // Créer une nouvelle alerte
+                const alert = {
+                    ...newAlert,
+                    id: Date.now() + Math.random(),
+                    startTime: new Date(),
+                    resolved: false,
+                    endTime: null,
+                    resolvedMessage: null
+                };
+                existingAlerts.push(alert);
+            }
+        });
         
-        alertElement.innerHTML = `
-            <div class="alert-header">
-                <div class="alert-icon ${alert.resolved ? 'resolved' : alert.severity}">
-                    <i class="fas fa-${iconClass}"></i>
+        // Vider le conteneur sauf le titre
+        const title = container.querySelector('.alerts-title');
+        container.innerHTML = '';
+        if (title) container.appendChild(title);
+        
+        // Afficher toutes les alertes (y compris celles résolues)
+        existingAlerts.forEach(alert => {
+            const alertElement = document.createElement('div');
+            
+            // Déterminer la classe de l'alerte en fonction de son état
+            if (alert.resolved) {
+                alertElement.className = 'alert-item resolved';
+            } else {
+                alertElement.className = `alert-item ${alert.severity}`;
+            }
+            
+            // Déterminer l'icône
+            let iconClass = 'info';
+            if (alert.resolved) {
+                iconClass = 'check-circle';
+            } else if (alert.severity === 'warning') {
+                iconClass = 'exclamation-triangle';
+            } else if (alert.severity === 'critical') {
+                iconClass = 'times-circle';
+            }
+            
+            // Préparer le message
+            let message = alert.message;
+            if (alert.resolved && alert.resolvedMessage) {
+                message += `<br><span class="resolved-info">${alert.resolvedMessage}</span>`;
+            }
+            
+            // Pour l'alerte de panne RPC, ajouter un compteur en temps réel si elle n'est pas résolue
+            if (alert.isRPCDowntime && !alert.resolved) {
+                message += `<br><span class="rpc-downtime-duration" data-start="${alert.startTime.getTime()}">Calculating downtime...</span>`;
+            }
+            
+            // Pour l'alerte de dernier bloc, ajouter un compteur en temps réel si elle n'est pas résolue
+            if (alert.isBlockDowntime && !alert.resolved) {
+                message += `<br><span class="block-downtime-duration" data-start="${alert.startTime.getTime()}">Calculating downtime...</span>`;
+            }
+            
+            alertElement.innerHTML = `
+                <div class="alert-header">
+                    <div class="alert-icon ${alert.resolved ? 'resolved' : alert.severity}">
+                        <i class="fas fa-${iconClass}"></i>
+                    </div>
+                    <div class="alert-type">${alert.type}</div>
                 </div>
-                <div class="alert-type">${alert.type}</div>
-            </div>
-            <div class="alert-content">
-                <div class="alert-message">${message}</div>
-            </div>
-        `;
+                <div class="alert-content">
+                    <div class="alert-message">${message}</div>
+                </div>
+            `;
+            
+            container.appendChild(alertElement);
+        });
         
-        container.appendChild(alertElement);
-    });
-    
-    // S'il n'y a aucune alerte, afficher un message
-    if (existingAlerts.length === 0) {
-        container.innerHTML = '<div class="no-alerts">No alerts</div>';
+        // S'il n'y a aucune alerte, afficher un message
+        if (existingAlerts.length === 0) {
+            container.innerHTML = '<div class="no-alerts">No alerts</div>';
+        }
+        
+        // Démarrer le compteur en temps réel pour les durées de panne RPC et de bloc
+        updateDowntimeCounters();
     }
     
-    // Démarrer le compteur en temps réel pour les durées de panne RPC
-    updateRPCDowntimeCounters();
-}
-    
-    // Fonction pour mettre à jour les compteurs de durée de panne RPC en temps réel
-    function updateRPCDowntimeCounters() {
-        const counters = document.querySelectorAll('.rpc-downtime-duration');
-        counters.forEach(counter => {
+    // Fonction pour mettre à jour les compteurs de durée de panne en temps réel
+    function updateDowntimeCounters() {
+        // Compteurs RPC
+        const rpcCounters = document.querySelectorAll('.rpc-downtime-duration');
+        rpcCounters.forEach(counter => {
+            const startTime = parseInt(counter.getAttribute('data-start'));
+            const now = Date.now();
+            const duration = now - startTime;
+            
+            counter.textContent = `Downtime: ${formatDuration(duration)}`;
+        });
+        
+        // Compteurs Bloc
+        const blockCounters = document.querySelectorAll('.block-downtime-duration');
+        blockCounters.forEach(counter => {
             const startTime = parseInt(counter.getAttribute('data-start'));
             const now = Date.now();
             const duration = now - startTime;
@@ -678,7 +543,7 @@ function updateAlerts(alerts) {
         });
         
         // Continuer à mettre à jour toutes les secondes
-        setTimeout(updateRPCDowntimeCounters, 1000);
+        setTimeout(updateDowntimeCounters, 1000);
     }
     
     // Fonction pour ajouter des données au cache intelligent
@@ -846,12 +711,18 @@ function updateAlerts(alerts) {
         }, 3000);
     }
     
-    // Fonction pour formater la date en heure locale - CORRIGÉE
+    // Fonction pour formater la date en heure locale
     function formatLocalDate(dateString) {
         if (!dateString) return 'N/A';
         
         try {
-            const date = new Date(dateString);
+            let date;
+            if (typeof dateString === 'string') {
+                date = new Date(dateString);
+            } else {
+                date = dateString;
+            }
+            
             // Vérifier si la date est valide
             if (isNaN(date.getTime())) return 'N/A';
             
@@ -870,7 +741,7 @@ function updateAlerts(alerts) {
         }
     }
     
-    // Fonction pour formater les étiquettes du graphique en fonction de l'unité sélectionnée - AMÉLIORÉE
+    // Fonction pour formater les étiquettes du graphique en fonction de l'unité sélectionnée
     function formatChartLabel(dateString, unit, index, totalLabels) {
         if (!dateString) return 'N/A';
         
@@ -912,7 +783,7 @@ function updateAlerts(alerts) {
         }
     }
     
-    // Fonction pour mettre à jour l'heure actuelle - CORRIGÉE
+    // Fonction pour mettre à jour l'heure actuelle
     function updateCurrentTime() {
         const now = new Date();
         
@@ -931,50 +802,7 @@ function updateAlerts(alerts) {
         document.getElementById('last-check').textContent = localTimeString;
     }
     
-    // Fonction pour obtenir des étiquettes uniques en fonction de l'unité
-    function getUniqueLabels(data, unit) {
-        if (!data || data.length === 0) return [];
-        
-        const uniqueLabels = new Map();
-        
-        data.forEach(item => {
-            const date = new Date(item.timestamp);
-            let label;
-            
-            if (unit === 'seconds') {
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                const seconds = String(date.getSeconds()).padStart(2, '0');
-                label = `${hours}:${minutes}:${seconds}`;
-            } else if (unit === 'minutes') {
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                label = `${hours}:${minutes}`;
-            } else if (unit === 'hours') {
-                const hours = String(date.getHours()).padStart(2, '0');
-                label = `${hours}:00`;
-            } else if (unit === 'days') {
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                label = `${month}-${day}`;
-            } else {
-                const hours = String(date.getHours()).padStart(2, '0');
-                const minutes = String(date.getMinutes()).padStart(2, '0');
-                const seconds = String(date.getSeconds()).padStart(2, '0');
-                label = `${hours}:${minutes}:${seconds}`;
-            }
-            
-            // Stocker la première valeur pour chaque étiquette unique
-            if (!uniqueLabels.has(label)) {
-                uniqueLabels.set(label, item.ping || 0);
-            }
-        });
-        
-        // Convertir la Map en tableau d'objets {label, value}
-        return Array.from(uniqueLabels, ([label, value]) => ({ label, value }));
-    }
-    
-    // Function to update ping chart in real-time - MODIFIÉE
+    // Function to update ping chart in real-time
     function updatePingChart() {
         console.log("Updating ping chart with interval:", chartUpdateInterval, "ms");
         
@@ -1040,7 +868,7 @@ function updateAlerts(alerts) {
     // Variable pour suivre le dernier timestamp des données
     let lastDataTimestamp = null;
     
-    // Modifier la fonction updateData() pour inclure la mise à jour des alertes - CORRIGÉE
+    // Modifier la fonction updateData() pour inclure la mise à jour des alertes
     function updateData() {
         console.log("Updating data...");
         document.getElementById('sync-status').textContent = 'Synchronizing...';
@@ -1070,17 +898,11 @@ function updateAlerts(alerts) {
                 // Mettre à jour le timestamp
                 lastDataTimestamp = currentTimestamp;
                 
-                // Update server status
+                // Update server status - Force to offline as per user request
                 const serverStatusElement = document.getElementById('server-status');
                 const serverStatusText = document.getElementById('server-status-text');
-                
-                if (data.server_status === 'online') {
-                    serverStatusElement.className = 'server-status online';
-                    serverStatusText.textContent = 'Server Online';
-                } else {
-                    serverStatusElement.className = 'server-status offline';
-                    serverStatusText.textContent = 'Server Offline';
-                }
+                serverStatusElement.className = 'server-status offline';
+                serverStatusText.textContent = 'Server Offline';
                 
                 // Update main statuses
                 updateStatus('rpc-status', data.rpc_status);
@@ -1110,7 +932,7 @@ function updateAlerts(alerts) {
                 document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
                 document.getElementById('security').textContent = data.security_info || 'N/A';
                 
-                // Update last check with local time format - CORRIGÉ
+                // Update last check with local time format
                 updateCurrentTime();
                 
                 // Update TXT Records
@@ -1234,3 +1056,169 @@ function updateAlerts(alerts) {
     // Mettre à jour l'heure immédiatement au démarrage
     updateCurrentTime();
 });
+
+// Three.js Background Functions
+function initThreeJSBackground() {
+    // Créer un conteneur pour Three.js s'il n'existe pas
+    let container = document.getElementById('three-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'three-container';
+        container.style.position = 'fixed';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.height = '100%';
+        container.style.zIndex = '-1';
+        document.body.appendChild(container);
+    }
+    
+    // Create scene
+    const scene = new THREE.Scene();
+    
+    // Create camera
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 5;
+    
+    // Create renderer
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+    
+    // Create particles
+    const particlesGeometry = new THREE.BufferGeometry();
+    const particlesCount = 5000;
+    const posArray = new Float32Array(particlesCount * 3);
+    
+    // Fill position array with random values
+    for(let i = 0; i < particlesCount * 3; i++) {
+        posArray[i] = (Math.random() - 0.5) * 10;
+    }
+    
+    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+    
+    // Create particles material
+    const particlesMaterial = new THREE.PointsMaterial({
+        size: 0.005,
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.8,
+        blending: THREE.AdditiveBlending
+    });
+    
+    // Create particles mesh
+    const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+    scene.add(particlesMesh);
+    
+    // Create rotating cube - 20% smaller and positioned optimally
+    const cubeGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8); // 20% smaller
+    const cubeMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ffff,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.7
+    });
+    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    
+    // Position cube in the upper part of the viewport
+    cube.position.y = -2;  // Position higher up
+    cube.position.z = 1;   // Move cube closer to camera
+    
+    scene.add(cube);
+    
+    // Create animated gradient background
+    const gradientTexture = createGradientTexture();
+    scene.background = gradientTexture;
+    
+    // Handle window resize
+    window.addEventListener('resize', function() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // Animation variables
+    let baseRotationSpeed = 0.01;
+    let baseParticleSpeed = 0.001;
+    let currentRotationSpeed = baseRotationSpeed;
+    let currentParticleSpeed = baseParticleSpeed;
+    let targetRotationSpeed = baseRotationSpeed;
+    let targetParticleSpeed = baseParticleSpeed;
+    
+    // Animation loop
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        // Smooth transition for rotation speed
+        currentRotationSpeed += (targetRotationSpeed - currentRotationSpeed) * 0.1;
+        currentParticleSpeed += (targetParticleSpeed - currentParticleSpeed) * 0.1;
+        
+        // Rotate cube with current speed
+        cube.rotation.x += currentRotationSpeed;
+        cube.rotation.y += currentRotationSpeed;
+        
+        // Add floating animation to cube
+        cube.position.y = 2 + Math.sin(Date.now() * 0.001) * 0.2;
+        
+        // Rotate particles with current speed
+        particlesMesh.rotation.y += currentParticleSpeed;
+        
+        // Animate gradient
+        updateGradientTexture(gradientTexture);
+        
+        renderer.render(scene, camera);
+    }
+    
+    animate();
+    
+    console.log('Three.js background initialized successfully');
+}
+
+function createGradientTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    
+    const context = canvas.getContext('2d');
+    const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+    
+    gradient.addColorStop(0, '#0a0a1a');
+    gradient.addColorStop(0.5, '#0a0a2a');
+    gradient.addColorStop(1, '#0a0a1a');
+    
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    
+    return texture;
+}
+
+function updateGradientTexture(texture) {
+    // Add subtle animation to gradient
+    const time = Date.now() * 0.0001;
+    const canvas = texture.image;
+    const context = canvas.getContext('2d');
+    
+    const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+    
+    // Animate gradient colors
+    const r1 = Math.sin(time) * 5 + 10;
+    const g1 = Math.sin(time * 0.7) * 5 + 10;
+    const b1 = Math.sin(time * 1.3) * 10 + 26;
+    
+    const r2 = Math.sin(time * 0.5) * 5 + 10;
+    const g2 = Math.sin(time * 1.2) * 5 + 10;
+    const b2 = Math.sin(time * 0.8) * 10 + 42;
+    
+    gradient.addColorStop(0, `rgb(${r1}, ${g1}, ${b1})`);
+    gradient.addColorStop(0.5, `rgb(${r2}, ${g2}, ${b2})`);
+    gradient.addColorStop(1, `rgb(${r1}, ${g1}, ${b1})`);
+    
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    texture.needsUpdate = true;
+}
