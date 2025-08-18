@@ -322,229 +322,65 @@ document.getElementById('status-button').addEventListener('click', function() {
     }
     
     // Fonction pour mettre à jour les alertes - CORRIGÉE
-    function updateAlerts(alerts) {
-        const container = document.getElementById('alerts-container');
-
-        // Réinitialiser les alertes existantes si nécessaire
-if (alerts.length > 0 && !existingAlerts.some(alert => alert.isRPCDowntime || alert.isBlockDowntime)) {
-    existingAlerts = [];
-}
-        
-        // Si le conteneur est vide, initialiser avec un titre
-        if (container.children.length === 0) {
-            const title = document.createElement('div');
-            title.className = 'alerts-title';
-            title.textContent = 'System Alerts';
-            container.appendChild(title);
+function updateAlerts(alerts, rpcStatus, serverStatus) {
+    const container = document.getElementById('alerts-container');
+    
+    // Réinitialiser le conteneur
+    container.innerHTML = '';
+    
+    // Ajouter un titre si nécessaire
+    const title = document.createElement('div');
+    title.className = 'alerts-title';
+    title.textContent = 'System Alerts';
+    container.appendChild(title);
+    
+    // Filtrer les alertes pour supprimer toutes les alertes RPC et de bloc
+    const filteredAlerts = alerts.filter(alert => {
+        // Supprimer toutes les alertes de type RPC
+        if (alert.type === 'RPC') {
+            return false;
         }
         
-        // Définir la date correcte pour la panne RPC (10 août 2025 à 22:43:00 PM (+02:00 UTC))
-        const rpcDowntimeStart = new Date("2025-08-10T22:43:00+02:00");
-        
-        // Vérifier si le RPC est actuellement en ligne
-        const rpcOnline = alerts.some(alert => 
-            alert.type === 'RPC' && 
-            alert.message.includes('online') && 
-            !alert.message.includes('offline → online')
-        );
-        
-        // Créer ou mettre à jour l'alerte de panne RPC
-        const rpcAlertIndex = existingAlerts.findIndex(alert => alert.id === 'rpc-downtime');
-        
-        if (!rpcOnline && rpcAlertIndex === -1) {
-            // Créer l'alerte de panne RPC si elle n'existe pas et que le RPC est hors ligne
-            rpcDowntimeAlert = {
-                id: 'rpc-downtime',
-                type: 'RPC Downtime',
-                message: `RPC Downtime last tx: ${formatLocalDate(rpcDowntimeStart)}`,
-                severity: 'critical',
-                startTime: rpcDowntimeStart,
-                resolved: false,
-                endTime: null,
-                resolvedMessage: null,
-                isRPCDowntime: true
-            };
-            
-            existingAlerts.push(rpcDowntimeAlert);
-        } else if (rpcOnline && rpcAlertIndex !== -1) {
-            // Si le RPC est de nouveau en ligne, mettre à jour l'alerte
-            const existingAlert = existingAlerts[rpcAlertIndex];
-            existingAlert.resolved = true;
-            existingAlert.endTime = new Date();
-            
-            const duration = existingAlert.endTime - existingAlert.startTime;
-            existingAlert.resolvedMessage = `RPC is back online. Downtime: ${formatDuration(duration)}`;
-            existingAlert.message = `RPC was offline from ${formatLocalDate(existingAlert.startTime)} to ${formatLocalDate(existingAlert.endTime)}`;
-            
-            // Réinitialiser le suivi de la panne
-            rpcDowntimeAlert = null;
+        // Supprimer toutes les alertes de type Block
+        if (alert.type === 'Block') {
+            return false;
         }
         
-        // Créer ou mettre à jour l'alerte de dernier bloc
-        const blockAlertIndex = existingAlerts.findIndex(alert => alert.id === 'block-downtime');
-        
-        if (blockAlertIndex === -1) {
-            // Créer l'alerte de dernier bloc
-            blockDowntimeAlert = {
-                id: 'block-downtime',
-                type: 'Block Downtime',
-                message: `Last block was mined at ${formatLocalDate(lastBlockDate)}`,
-                severity: 'critical',
-                startTime: lastBlockDate,
-                resolved: false,
-                endTime: null,
-                resolvedMessage: null,
-                isBlockDowntime: true
-            };
-            
-            existingAlerts.push(blockDowntimeAlert);
-        }
-        
-        // Dans la fonction updateAlerts, remplacez le bloc de filtrage existant par celui-ci :
-
-// Filtrer les alertes pour supprimer l'alerte jaune indésirable et les transitions "offline → online"
-const filteredAlerts = alerts.filter(alert => {
-    // Supprimer l'alerte spécifique "RPC is down since 2025-08-17 18:52:51"
-    if (alert.message.includes('RPC is down since 2025-08-17 18:52:51')) {
-        return false;
-    }
+        return true;
+    });
     
-    // Supprimer toutes les alertes de type RPC avec sévérité "warning" qui contiennent "RPC is down since"
-    if (alert.type === 'RPC' && alert.severity === 'warning' && alert.message.includes('RPC is down since')) {
-        return false;
-    }
-    
-    // Supprimer uniquement les alertes de transition RPC "offline → online"
-    if (alert.type === 'RPC' && alert.message.includes('offline → online')) {
-        return false;
-    }
-    
-    return true;
-});
-
-// Ajoutez ce bloc supplémentaire après la création des alertes RPC et Block :
-
-// Filtrer à nouveau les alertes existantes pour supprimer les doublons ou les indésirables
-existingAlerts = existingAlerts.filter(alert => {
-    // Supprimer les alertes de type RPC avec sévérité "warning" qui contiennent "RPC is down since"
-    if (alert.type === 'RPC' && alert.severity === 'warning' && alert.message.includes('RPC is down since')) {
-        return false;
-    }
-    
-    // Conserver toutes les autres alertes
-    return true;
-});
-        
-        // Mettre à jour les autres alertes
-        filteredAlerts.forEach(newAlert => {
-            // Ignorer les alertes que nous gérons séparément
-            if ((newAlert.type === 'RPC' && newAlert.message.includes('RPC is down since')) ||
-                (newAlert.type === 'Block' && newAlert.message.includes('Last block was mined'))) {
-                return;
-            }
-            
-            // Vérifier si une alerte similaire existe déjà
-            const existingAlertIndex = existingAlerts.findIndex(alert => 
-                alert.type === newAlert.type && alert.message.includes(newAlert.message.split(' ')[0])
-            );
-            
-            if (existingAlertIndex !== -1) {
-                // Mettre à jour l'alerte existante
-                const existingAlert = existingAlerts[existingAlertIndex];
-                
-                // Si le statut a changé (par exemple, de offline à online)
-                if (existingAlert.status !== newAlert.status) {
-                    // Marquer comme résolu si le nouveau statut est online
-                    if (newAlert.status === 'online' || newAlert.status === 'success') {
-                        existingAlert.resolved = true;
-                        existingAlert.endTime = new Date();
-                        existingAlert.resolvedMessage = `Issue resolved at ${formatLocalDate(existingAlert.endTime)}`;
-                    }
-                }
-                
-                // Mettre à jour les autres informations
-                existingAlert.status = newAlert.status;
-                existingAlert.severity = newAlert.severity;
-                existingAlert.timestamp = newAlert.timestamp;
-            } else {
-                // Créer une nouvelle alerte
-                const alert = {
-                    ...newAlert,
-                    id: Date.now() + Math.random(),
-                    startTime: new Date(),
-                    resolved: false,
-                    endTime: null,
-                    resolvedMessage: null
-                };
-                existingAlerts.push(alert);
-            }
-        });
-        
-        // Vider le conteneur sauf le titre
-        const title = container.querySelector('.alerts-title');
-        container.innerHTML = '';
-        if (title) container.appendChild(title);
-        
-        // Afficher toutes les alertes (y compris celles résolues)
-        existingAlerts.forEach(alert => {
+    // Afficher les alertes restantes
+    if (filteredAlerts.length === 0) {
+        container.innerHTML = '<div class="no-alerts">No alerts</div>';
+    } else {
+        filteredAlerts.forEach(alert => {
             const alertElement = document.createElement('div');
-            
-            // Déterminer la classe de l'alerte en fonction de son état
-            if (alert.resolved) {
-                alertElement.className = 'alert-item resolved';
-            } else {
-                alertElement.className = `alert-item ${alert.severity}`;
-            }
+            alertElement.className = `alert-item ${alert.severity}`;
             
             // Déterminer l'icône
             let iconClass = 'info';
-            if (alert.resolved) {
-                iconClass = 'check-circle';
-            } else if (alert.severity === 'warning') {
+            if (alert.severity === 'warning') {
                 iconClass = 'exclamation-triangle';
             } else if (alert.severity === 'critical') {
                 iconClass = 'times-circle';
             }
             
-            // Préparer le message
-            let message = alert.message;
-            if (alert.resolved && alert.resolvedMessage) {
-                message += `<br><span class="resolved-info">${alert.resolvedMessage}</span>`;
-            }
-            
-            // Pour l'alerte de panne RPC, ajouter un compteur en temps réel si elle n'est pas résolue
-            if (alert.isRPCDowntime && !alert.resolved) {
-                message += `<br><span class="rpc-downtime-duration" data-start="${alert.startTime.getTime()}">Calculating downtime...</span>`;
-            }
-            
-            // Pour l'alerte de dernier bloc, ajouter un compteur en temps réel si elle n'est pas résolue
-            if (alert.isBlockDowntime && !alert.resolved) {
-                message += `<br><span class="block-downtime-duration" data-start="${alert.startTime.getTime()}">Calculating downtime...</span>`;
-            }
-            
             alertElement.innerHTML = `
                 <div class="alert-header">
-                    <div class="alert-icon ${alert.resolved ? 'resolved' : alert.severity}">
+                    <div class="alert-icon ${alert.severity}">
                         <i class="fas fa-${iconClass}"></i>
                     </div>
                     <div class="alert-type">${alert.type}</div>
                 </div>
                 <div class="alert-content">
-                    <div class="alert-message">${message}</div>
+                    <div class="alert-message">${alert.message}</div>
                 </div>
             `;
             
             container.appendChild(alertElement);
         });
-        
-        // S'il n'y a aucune alerte, afficher un message
-        if (existingAlerts.length === 0) {
-            container.innerHTML = '<div class="no-alerts">No alerts</div>';
-        }
-        
-        // Démarrer le compteur en temps réel pour les durées de panne RPC et de bloc
-        updateDowntimeCounters();
     }
+}
     
     // Fonction pour mettre à jour les compteurs de durée de panne en temps réel
     function updateDowntimeCounters() {
