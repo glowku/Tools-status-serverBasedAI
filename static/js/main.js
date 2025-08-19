@@ -2,18 +2,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize Three.js background with particles and rotating cube
     initThreeJSBackground();
     
-  // Handle menu navigation
-document.getElementById('easy-node-button').addEventListener('click', function() {
-    window.location.href = 'https://based-node-installer.onrender.com/index.html';
-});
+    // Handle menu navigation
+    document.getElementById('easy-node-button').addEventListener('click', function() {
+        window.location.href = 'https://based-node-installer.onrender.com/index.html';
+    });
 
-document.getElementById('monitor-button').addEventListener('click', function() {
-    window.location.href = 'https://based-node-installer.onrender.com/monitor.html';
-});
+    document.getElementById('monitor-button').addEventListener('click', function() {
+        window.location.href = 'https://based-node-installer.onrender.com/monitor.html';
+    });
 
-document.getElementById('status-button').addEventListener('click', function() {
-    window.location.href = 'https://tools-status-serverbasedai.onrender.com/';
-});
+    document.getElementById('status-button').addEventListener('click', function() {
+        window.location.href = 'https://tools-status-serverbasedai.onrender.com/';
+    });
+    
     // Handle menu visibility on scroll
     const menuBar = document.getElementById('menu-bar');
     let lastScrollTop = 0;
@@ -322,65 +323,65 @@ document.getElementById('status-button').addEventListener('click', function() {
     }
     
     // Fonction pour mettre à jour les alertes - CORRIGÉE
-function updateAlerts(alerts, rpcStatus, serverStatus) {
-    const container = document.getElementById('alerts-container');
-    
-    // Réinitialiser le conteneur
-    container.innerHTML = '';
-    
-    // Ajouter un titre si nécessaire
-    const title = document.createElement('div');
-    title.className = 'alerts-title';
-    title.textContent = 'System Alerts';
-    container.appendChild(title);
-    
-    // Filtrer les alertes pour supprimer toutes les alertes RPC et de bloc
-    const filteredAlerts = alerts.filter(alert => {
-        // Supprimer toutes les alertes de type RPC
-        if (alert.type === 'RPC') {
-            return false;
-        }
+    function updateAlerts(alerts, rpcStatus, serverStatus) {
+        const container = document.getElementById('alerts-container');
         
-        // Supprimer toutes les alertes de type Block
-        if (alert.type === 'Block') {
-            return false;
-        }
+        // Réinitialiser le conteneur
+        container.innerHTML = '';
         
-        return true;
-    });
-    
-    // Afficher les alertes restantes
-    if (filteredAlerts.length === 0) {
-        container.innerHTML = '<div class="no-alerts">No alerts</div>';
-    } else {
-        filteredAlerts.forEach(alert => {
-            const alertElement = document.createElement('div');
-            alertElement.className = `alert-item ${alert.severity}`;
-            
-            // Déterminer l'icône
-            let iconClass = 'info';
-            if (alert.severity === 'warning') {
-                iconClass = 'exclamation-triangle';
-            } else if (alert.severity === 'critical') {
-                iconClass = 'times-circle';
+        // Ajouter un titre si nécessaire
+        const title = document.createElement('div');
+        title.className = 'alerts-title';
+        title.textContent = 'System Alerts';
+        container.appendChild(title);
+        
+        // Filtrer les alertes pour supprimer toutes les alertes RPC et de bloc
+        const filteredAlerts = alerts.filter(alert => {
+            // Supprimer toutes les alertes de type RPC
+            if (alert.type === 'RPC') {
+                return false;
             }
             
-            alertElement.innerHTML = `
-                <div class="alert-header">
-                    <div class="alert-icon ${alert.severity}">
-                        <i class="fas fa-${iconClass}"></i>
-                    </div>
-                    <div class="alert-type">${alert.type}</div>
-                </div>
-                <div class="alert-content">
-                    <div class="alert-message">${alert.message}</div>
-                </div>
-            `;
+            // Supprimer toutes les alertes de type Block
+            if (alert.type === 'Block') {
+                return false;
+            }
             
-            container.appendChild(alertElement);
+            return true;
         });
+        
+        // Afficher les alertes restantes
+        if (filteredAlerts.length === 0) {
+            container.innerHTML = '<div class="no-alerts">No alerts</div>';
+        } else {
+            filteredAlerts.forEach(alert => {
+                const alertElement = document.createElement('div');
+                alertElement.className = `alert-item ${alert.severity}`;
+                
+                // Déterminer l'icône
+                let iconClass = 'info';
+                if (alert.severity === 'warning') {
+                    iconClass = 'exclamation-triangle';
+                } else if (alert.severity === 'critical') {
+                    iconClass = 'times-circle';
+                }
+                
+                alertElement.innerHTML = `
+                    <div class="alert-header">
+                        <div class="alert-icon ${alert.severity}">
+                            <i class="fas fa-${iconClass}"></i>
+                        </div>
+                        <div class="alert-type">${alert.type}</div>
+                    </div>
+                    <div class="alert-content">
+                        <div class="alert-message">${alert.message}</div>
+                    </div>
+                `;
+                
+                container.appendChild(alertElement);
+            });
+        }
     }
-}
     
     // Fonction pour mettre à jour les compteurs de durée de panne en temps réel
     function updateDowntimeCounters() {
@@ -706,8 +707,8 @@ function updateAlerts(alerts, rpcStatus, serverStatus) {
                     
                     const pingData = chartData.map(item => item.ping);
                     const rpcData = chartData.map(item => {
-                        // Convertir en ms si nécessaire
-                        return item.rpc !== null ? (item.rpc < 1 ? item.rpc * 1000 : item.rpc) : null;
+                        // Les valeurs sont déjà en ms, pas besoin de conversion
+                        return item.rpc !== null ? item.rpc : null;
                     });
                     
                     // Mettre à jour les données du graphique
@@ -772,9 +773,8 @@ function updateAlerts(alerts, rpcStatus, serverStatus) {
                 
                 // Update metrics - ensure we show actual values, not 0
                 if (data.rpc_value !== null && data.rpc_value !== undefined) {
-                    // Convert from seconds to milliseconds if needed
-                    const rpcMs = data.rpc_value < 1 ? data.rpc_value * 1000 : data.rpc_value;
-                    document.getElementById('rpc-metric').textContent = `${rpcMs.toFixed(2)} ms`;
+                    // Les valeurs sont déjà en ms, pas besoin de conversion
+                    document.getElementById('rpc-metric').textContent = `${data.rpc_value.toFixed(2)} ms`;
                 } else {
                     document.getElementById('rpc-metric').textContent = '-- ms';
                 }
@@ -791,7 +791,15 @@ function updateAlerts(alerts, rpcStatus, serverStatus) {
                 // Update detailed information
                 document.getElementById('ip-subdomain').textContent = data.ip_info || 'N/A';
                 document.getElementById('ip-domain').textContent = data.main_domain_info?.ip || 'N/A';
-                document.getElementById('redirect').textContent = data.main_domain_info?.redirect || 'N/A';
+                
+                // Correction pour la redirection - afficher "no redirection" au lieu de "Error"
+                const redirectValue = data.main_domain_info?.redirect;
+                if (redirectValue === 'Error') {
+                    document.getElementById('redirect').textContent = 'no redirection';
+                } else {
+                    document.getElementById('redirect').textContent = redirectValue || 'N/A';
+                }
+                
                 document.getElementById('security').textContent = data.security_info || 'N/A';
                 
                 // Update last check with local time format
@@ -823,7 +831,7 @@ function updateAlerts(alerts, rpcStatus, serverStatus) {
                         data.ssl_info.days_left !== undefined ? `${data.ssl_info.days_left} days` : 'N/A';
                 }
                 
-                // Update transaction information
+                // Update transaction information - Correction pour afficher les transactions
                 if (data.transactions) {
                     if (data.transactions.error) {
                         document.getElementById('latest-block').textContent = 'Error';
@@ -832,8 +840,16 @@ function updateAlerts(alerts, rpcStatus, serverStatus) {
                     } else {
                         document.getElementById('latest-block').textContent = 
                             data.transactions.block_number ? `#${data.transactions.block_number}` : 'N/A';
-                        document.getElementById('tx-count').textContent = 
-                            data.transactions.tx_count || 'N/A';
+                        
+                        // Afficher le nombre de transactions formaté si disponible, sinon le nombre brut
+                        if (data.transactions.formatted_txns) {
+                            document.getElementById('tx-count').textContent = data.transactions.formatted_txns;
+                        } else if (data.transactions.tx_count !== null && data.transactions.tx_count !== undefined) {
+                            document.getElementById('tx-count').textContent = data.transactions.tx_count;
+                        } else {
+                            document.getElementById('tx-count').textContent = 'N/A';
+                        }
+                        
                         document.getElementById('tx-source').textContent = 
                             data.transactions.source || 'N/A';
                     }
@@ -874,8 +890,8 @@ function updateAlerts(alerts, rpcStatus, serverStatus) {
                     
                     const pingData = chartData.map(item => item.ping);
                     const rpcData = chartData.map(item => {
-                        // Convertir en ms si nécessaire
-                        return item.rpc !== null ? (item.rpc < 1 ? item.rpc * 1000 : item.rpc) : null;
+                        // Les valeurs sont déjà en ms, pas besoin de conversion
+                        return item.rpc !== null ? item.rpc : null;
                     });
                     
                     // Mettre à jour les données du graphique

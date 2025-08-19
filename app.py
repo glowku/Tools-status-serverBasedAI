@@ -27,7 +27,7 @@ CONFIG = {
     "log_file": "basedai_monitor.log",
     "ports_to_check": [80, 443, 8545, 30333, 9933, 9944],
     "latency_threshold": 0.5,
-    "history_size": 120,  # Augmenté pour stocker 2 heures de données (120 points * 60 secondes)
+    "history_size": 120,
     "web_port": 5000,
     "fallback_rpc_urls": [
         "https://eth.public-rpc.com",
@@ -38,7 +38,12 @@ CONFIG = {
     "disable_port_checks": os.environ.get('DISABLE_PORT_CHECKS', 'false').lower() == 'true',
     "ping_timeout": 5,
     "ping_retries": 3,
-    "use_tcp_ping": os.environ.get('USE_TCP_PING', 'true').lower() == 'true'
+    "use_tcp_ping": os.environ.get('USE_TCP_PING', 'true').lower() == 'true',
+    "bfexplorer_api_url": "https://explorer.bf1337.org/api/v1",
+    "dns_api_timeout": 10,
+    "http_request_timeout": 15,
+    "http_retry_attempts": 3,
+    "http_retry_delay": 1
 }
 
 # Variables globales
@@ -46,7 +51,7 @@ check_history = []
 previous_results = {}
 last_dns_serial = None
 ping_history = []
-ping_update_interval = 5  # Secondes entre les mises à jour du ping
+ping_update_interval = 5
 latest_data = {
     "rpc_status": "unknown",
     "ping_status": "unknown",
@@ -65,12 +70,14 @@ latest_data = {
     "dns_records": {},
     "network_info": {},
     "transactions": {},
-    "ping_history": []
+    "ping_history": [],
+    "ip_consistent": False
 }
 
 # Variables pour les alertes persistantes
 rpc_status_alert = None
 server_status_alert = None
+last_ip_log_time = 0  # Pour le logging périodique des IP
 
 app = Flask(__name__)
 CORS(app)
@@ -86,28 +93,21 @@ logging.basicConfig(
 )
 
 def tcp_ping(host, port=80, timeout=5):
-    """
-    Effectue un ping TCP plus rapide que HTTP
-    """
     try:
         start_time = time.time()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
         sock.connect((host, port))
         sock.close()
-        return (time.time() - start_time) * 1000  # Convertir en ms
+        return (time.time() - start_time) * 1000
     except:
         return None
 
 def ping_host():
-    """
-    Mesure la latence avec la méthode appropriée pour l'environnement
-    """
-    # Sur Render, utiliser TCP ping qui est plus fiable
     if os.environ.get('RENDER') == 'true' and CONFIG["use_tcp_ping"]:
         try:
-            # Essayer plusieurs ports pour plus de fiabilité
-            ports = [80, 443]
+            # Ajouter le port RPC (8545) à la liste des ports à tester
+            ports = [80, 443, 8545]  # Ajout du port 8545
             results = []
             
             with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -119,30 +119,25 @@ def ping_host():
                         results.append(result)
             
             if results:
-                # Prendre la valeur la plus basse
                 ping_time = min(results)
                 return {"status": "success", "time": ping_time}
                 
         except Exception as e:
             logging.error(f"TCP ping failed: {str(e)}")
     
-    # Pour les autres environnements ou en cas d'échec, utiliser la méthode standard
     try:
-        # Construire la commande ping en fonction du système d'exploitation
         param = '-n' if platform.system().lower() == 'windows' else '-c'
         command = ['ping', param, '3', CONFIG['domain']]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         if response.returncode == 0:
-            # Extraire les temps de ping et calculer la moyenne
-            time_pattern = r'time[=<](\d+\.?\d*)\s*ms'
+            time_pattern = r'time[=<](\\d+\\.?\\d*)\\s*ms'
             times = re.findall(time_pattern, response.stdout)
             
             if times:
-                # Prendre la valeur médiane pour éviter les pics
                 times = sorted([float(t) for t in times])
                 if len(times) >= 3:
-                    ping_time = times[1]  # Médiane
+                    ping_time = times[1]
                 else:
                     ping_time = times[0]
                 
@@ -150,11 +145,10 @@ def ping_host():
     except Exception as e:
         logging.error(f"System ping failed: {str(e)}")
     
-    # Dernier recours : requête HTTP
     try:
         start_time = time.time()
         response = requests.get(f"http://{CONFIG['domain']}", timeout=5)
-        response_time = (time.time() - start_time) * 1000  # Convertir en ms
+        response_time = (time.time() - start_time) * 1000
         
         if response.status_code == 200:
             return {"status": "success", "time": response_time}
@@ -166,21 +160,21 @@ def ping_host():
         return {"status": "error", "message": "All ping methods failed"}
 
 def check_rpc_endpoint():
-    """
-    Vérifie le point de terminaison RPC avec une meilleure gestion des erreurs
-    """
     rpc_payload = {"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1}
     
-    # D'abord essayer avec l'URL principale
     try:
         start_time = time.time()
+        # Réduire le timeout de 15 à 5 secondes
         response = requests.post(
             CONFIG["rpc_url"], 
             json=rpc_payload, 
-            timeout=15,  # Timeout plus long
+            timeout=5,  # Changé de 15 à 5
             headers={'User-Agent': 'Mozilla/5.0 (compatible; BasedAI-Monitor/1.0)'}
         )
         response_time = time.time() - start_time
+        
+        # Ajouter un logging pour le temps de réponse
+        logging.info(f"RPC response time: {response_time:.3f} seconds")
         
         if response.status_code == 200:
             result = response.json()
@@ -203,7 +197,6 @@ def check_rpc_endpoint():
     except requests.exceptions.RequestException as e:
         logging.error(f"RPC request failed: {str(e)}")
         
-        # Essayer avec les URLs de secours
         for fallback_url in CONFIG["fallback_rpc_urls"]:
             try:
                 logging.info(f"Trying fallback RPC: {fallback_url}")
@@ -230,16 +223,11 @@ def check_rpc_endpoint():
                 logging.error(f"Fallback RPC failed: {fallback_url} - {str(fallback_error)}")
                 continue
         
-        # Si toutes les tentatives échouent, retourner une erreur
         return {"status": "offline", "message": "All RPC endpoints failed"}
 
 def check_ports_alt():
-    """
-    Alternative à check_ports qui utilise des requêtes HTTP au lieu de sockets
-    """
     port_results = {}
     
-    # Si les vérifications de ports sont désactivées, retourner des valeurs par défaut
     if CONFIG["disable_port_checks"]:
         logging.info("Port checks disabled, using default values")
         for port in CONFIG["ports_to_check"]:
@@ -249,7 +237,6 @@ def check_ports_alt():
                 port_results[port] = "unknown"
         return port_results
     
-    # Pour les ports HTTP/HTTPS, utiliser des requêtes HTTP
     if 80 in CONFIG["ports_to_check"]:
         try:
             response = requests.get(f"http://{CONFIG['domain']}", timeout=10)
@@ -264,12 +251,11 @@ def check_ports_alt():
         except:
             port_results[443] = "closed"
     
-    # Pour les autres ports, utiliser socket si possible
     for port in CONFIG["ports_to_check"]:
-        if port not in [80, 443]:  # On a déjà vérifié les ports 80 et 443
+        if port not in [80, 443]:
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(10)  # Timeout plus long
+                sock.settimeout(10)
                 result = sock.connect_ex((CONFIG["domain"], port))
                 sock.close()
                 
@@ -280,9 +266,7 @@ def check_ports_alt():
                     
             except Exception as e:
                 logging.error(f"Error checking port {port}: {str(e)}")
-                # En cas d'erreur, essayer avec une méthode alternative
                 try:
-                    # Essayer de se connecter via une requête HTTP si c'est un port web
                     if port in [8080, 8000, 3000, 5000]:
                         response = requests.get(f"http://{CONFIG['domain']}:{port}", timeout=10)
                         port_results[port] = "open" if response.status_code < 500 else "closed"
@@ -325,7 +309,6 @@ def get_ssl_info():
                 ssl_info['notAfter'] = cert.get('notAfter', 'N/A')
                 ssl_info['signatureAlgorithm'] = cert.get('signatureAlgorithm', 'N/A')
                 
-                # Calculate remaining days
                 expire_date = datetime.strptime(cert['notAfter'], '%b %d %H:%M:%S %Y %Z')
                 days_left = (expire_date - datetime.now()).days
                 ssl_info['days_left'] = days_left
@@ -350,7 +333,6 @@ def get_security_info():
         if response.headers.get("X-XSS-Protection"):
             security_headers.append("XSS")
         
-        # Get SSL certificate info
         cert_info = ""
         try:
             context = ssl.create_default_context()
@@ -372,12 +354,8 @@ def get_security_info():
         return f"Error: {str(e)}"
 
 def get_main_domain_info():
-    """
-    Récupère les informations du domaine principal avec une meilleure gestion des erreurs
-    """
     result = {"ip": "N/A", "redirect": "N/A"}
     
-    # Récupérer l'IP
     try:
         ip = socket.gethostbyname(CONFIG["main_domain"])
         result["ip"] = ip
@@ -385,30 +363,57 @@ def get_main_domain_info():
         logging.error(f"Error getting main domain IP: {str(e)}")
         result["ip"] = "Error"
     
-    # Vérifier la redirection
-    try:
-        response = requests.get(f"http://{CONFIG['main_domain']}", timeout=10, allow_redirects=True)
-        if response.history:
-            final_url = response.url
-            if CONFIG["domain"] in final_url:
-                result["redirect"] = f"→ {CONFIG['domain']}"
+    max_retries = CONFIG["http_retry_attempts"]
+    for attempt in range(max_retries):
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(
+                f"http://{CONFIG['main_domain']}", 
+                timeout=CONFIG["http_request_timeout"], 
+                headers=headers, 
+                allow_redirects=True
+            )
+            
+            if response.history:
+                final_url = response.url
+                if CONFIG["domain"] in final_url:
+                    result["redirect"] = f"→ {CONFIG['domain']}"
+                else:
+                    result["redirect"] = f"→ {final_url}"
+                break
             else:
-                result["redirect"] = f"→ {final_url}"
-        else:
-            result["redirect"] = "None"
-    except Exception as e:
-        logging.error(f"Error checking main domain redirect: {str(e)}")
-        result["redirect"] = "Error"
+                result["redirect"] = "no redirection"  # Correction: afficher "no redirection" au lieu de "None"
+                break
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Attempt {attempt+1} failed: {str(e)}")
+            if attempt == max_retries - 1:
+                result["redirect"] = "no redirection"  # Correction: afficher "no redirection" au lieu de "Error"
+            time.sleep(CONFIG["http_retry_delay"])
     
     return result
+
+def verify_ip_consistency():
+    try:
+        subdomain_ip = socket.gethostbyname(CONFIG["domain"])
+        main_domain_ip = socket.gethostbyname(CONFIG["main_domain"])
+        
+        if subdomain_ip == main_domain_ip:
+            logging.info(f"IP consistency verified: {subdomain_ip}")
+            return True
+        else:
+            logging.warning(f"IP inconsistency: subdomain={subdomain_ip}, domain={main_domain_ip}")
+            return False
+    except Exception as e:
+        logging.error(f"Error verifying IP consistency: {str(e)}")
+        return False
 
 def get_dns_serial():
     global last_dns_serial
     
-    # Forcer l'activation des vérifications DNS sur Render
     force_dns_checks = os.environ.get('FORCE_DNS_CHECKS', 'false').lower() == 'true'
     
-    # Si les vérifications DNS sont désactivées mais qu'on force quand même
     if CONFIG["disable_dns_checks"] and not force_dns_checks:
         logging.info("DNS checks disabled, using default serial")
         today = datetime.now()
@@ -417,22 +422,20 @@ def get_dns_serial():
         return date_serial
     
     try:
-        # Méthode 1: Utiliser une API DNS externe plus fiable - Google DNS API
         try:
-            domain = CONFIG["main_domain"]  # Utiliser le domaine principal au lieu du sous-domaine
+            domain = CONFIG["main_domain"]
             url = f"https://dns.google/resolve?name={domain}&type=SOA"
             
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
             
-            response = requests.get(url, headers=headers, timeout=15)
+            response = requests.get(url, headers=headers, timeout=CONFIG["dns_api_timeout"])
             if response.status_code == 200:
                 data = response.json()
                 if "Answer" in data:
                     for answer in data["Answer"]:
-                        if answer.get("type") == 6:  # Type SOA
-                            # Extraire le serial du champ data
+                        if answer.get("type") == 6:
                             soa_data = answer.get("data", "").split(" ")
                             if len(soa_data) >= 3:
                                 serial = soa_data[2]
@@ -442,7 +445,6 @@ def get_dns_serial():
         except Exception as e:
             logging.error(f"Error with Google DNS API: {str(e)}")
         
-        # Méthode 2: Utiliser l'API de Cloudflare DNS
         try:
             domain = CONFIG["main_domain"]
             url = f"https://cloudflare-dns.com/dns-query?name={domain}&type=SOA"
@@ -452,13 +454,12 @@ def get_dns_serial():
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
             
-            response = requests.get(url, headers=headers, timeout=15)
+            response = requests.get(url, headers=headers, timeout=CONFIG["dns_api_timeout"])
             if response.status_code == 200:
                 data = response.json()
                 if "Answer" in data:
                     for answer in data["Answer"]:
-                        if answer.get("type") == 6:  # Type SOA
-                            # Extraire le serial du champ data
+                        if answer.get("type") == 6:
                             soa_data = answer.get("data", "").split(" ")
                             if len(soa_data) >= 3:
                                 serial = soa_data[2]
@@ -468,18 +469,16 @@ def get_dns_serial():
         except Exception as e:
             logging.error(f"Error with Cloudflare DNS API: {str(e)}")
         
-        # Méthode 3: Utiliser l'API de Whois
         try:
-            domain = CONFIG["main_domain"]  # Utiliser le domaine principal au lieu du sous-domaine
+            domain = CONFIG["main_domain"]
             url = f"https://www.whois.com/whois/{domain}"
             
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
             
-            response = requests.get(url, headers=headers, timeout=15)
+            response = requests.get(url, headers=headers, timeout=CONFIG["dns_api_timeout"])
             if response.status_code == 200:
-                # Chercher le serial dans la réponse
                 serial_patterns = [
                     r'Registry Expiry Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
                     r'Expiration Date:[^0-9]*([0-9]{4}-[0-9]{2}-[0-9]{2})',
@@ -491,7 +490,6 @@ def get_dns_serial():
                     match = re.search(pattern, response.text, re.IGNORECASE)
                     if match:
                         date_str = match.group(1)
-                        # Convertir la date en format YYYYMMDD
                         date_obj = datetime.strptime(date_str, "%Y-%m-%d")
                         serial = date_obj.strftime("%Y%m%d")
                         logging.info(f"DNS serial found using Whois API: {serial}")
@@ -500,13 +498,12 @@ def get_dns_serial():
         except Exception as e:
             logging.error(f"Error with Whois API: {str(e)}")
         
-        # Méthode 4: Utiliser l'API JSON Whois
         try:
             domain = CONFIG["main_domain"]
             url = f"https://jsonwhoisapi.com/api/v1/whois?domainName={domain}"
             
             headers = {
-                "Authorization": "Bearer demo",  # Clé de démonstration
+                "Authorization": "Bearer demo",
                 "Content-Type": "application/json"
             }
             
@@ -516,11 +513,9 @@ def get_dns_serial():
                 if "WhoisRecord" in data and "registryData" in data["WhoisRecord"]:
                     registry_data = data["WhoisRecord"]["registryData"]
                     
-                    # Chercher la date d'expiration
                     if "expirationDate" in registry_data:
                         exp_date = registry_data["expirationDate"]
                         if exp_date:
-                            # Formater la date
                             date_obj = datetime.strptime(exp_date.split("T")[0], "%Y-%m-%d")
                             serial = date_obj.strftime("%Y%m%d")
                             logging.info(f"DNS serial found using JSON Whois API: {serial}")
@@ -532,7 +527,6 @@ def get_dns_serial():
     except Exception as e:
         logging.error(f"Error executing DNS commands: {str(e)}")
     
-    # Si toutes les méthodes échouent, utiliser une valeur par défaut basée sur la date actuelle
     today = datetime.now()
     date_serial = today.strftime("%Y%m%d")
     logging.warning(f"All DNS methods failed, using date-based serial: {date_serial}")
@@ -540,26 +534,43 @@ def get_dns_serial():
     return date_serial
 
 def get_txt_records():
-    # Si les vérifications DNS sont désactivées, retourner une valeur par défaut
     if CONFIG["disable_dns_checks"]:
         logging.info("DNS checks disabled, using default TXT records")
         return []
     
     try:
-        # Try using Python's socket.getaddrinfo instead of nslookup
-        try:
-            import dns.resolver
-            answers = dns.resolver.resolve(CONFIG["domain"], 'TXT')
-            txt_records = [str(rdata) for rdata in answers]
-            if txt_records:
-                logging.info(f"TXT Records found using dns.resolver: {txt_records}")
-                return txt_records
-        except ImportError:
-            pass
-        except Exception as e:
-            logging.error(f"Error with dns.resolver: {str(e)}")
+        url = f"https://dns.google/resolve?name={CONFIG['domain']}&type=TXT"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=CONFIG["dns_api_timeout"])
         
-        # Fallback to nslookup
+        if response.status_code == 200:
+            data = response.json()
+            if "Answer" in data:
+                txt_records = []
+                for answer in data["Answer"]:
+                    if answer.get("type") == 16:
+                        txt_value = answer.get("data", '').replace('"', '')
+                        txt_records.append(txt_value)
+                
+                if txt_records:
+                    logging.info(f"TXT Records found using Google DNS API: {txt_records}")
+                    return txt_records
+    except Exception as e:
+        logging.error(f"Error with Google DNS API: {str(e)}")
+    
+    try:
+        import dns.resolver
+        answers = dns.resolver.resolve(CONFIG["domain"], 'TXT')
+        txt_records = [str(rdata).replace('"', '') for rdata in answers]
+        if txt_records:
+            logging.info(f"TXT Records found using dns.resolver: {txt_records}")
+            return txt_records
+    except ImportError:
+        pass
+    except Exception as e:
+        logging.error(f"Error with dns.resolver: {str(e)}")
+    
+    try:
         command = ['nslookup', '-type=TXT', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
@@ -574,27 +585,21 @@ def get_txt_records():
                         txt_records.append(txt_match.group(1))
             
             if txt_records:
-                logging.info(f"TXT Records found: {txt_records}")
+                logging.info(f"TXT Records found using nslookup: {txt_records}")
                 return txt_records
-            else:
-                logging.info("No TXT records found")
-                return []
-        else:
-            logging.error(f"nslookup TXT command failed: {response.stderr}")
-            return []
     except Exception as e:
-        logging.error(f"Error executing nslookup TXT: {str(e)}")
-        return []
+        logging.error(f"Error with nslookup: {str(e)}")
+    
+    logging.info("No TXT records found")
+    return []
 
 def get_dns_records():
     dns_records = {}
     
-    # Si les vérifications DNS sont désactivées, retourner des valeurs par défaut
     if CONFIG["disable_dns_checks"]:
         logging.info("DNS checks disabled, using default DNS records")
         return {"A": [], "MX": [], "NS": []}
     
-    # Get A records
     try:
         command = ['nslookup', '-type=A', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -611,7 +616,6 @@ def get_dns_records():
     except Exception as e:
         logging.error(f"Error fetching A records: {str(e)}")
     
-    # Get MX records
     try:
         command = ['nslookup', '-type=MX', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -628,7 +632,6 @@ def get_dns_records():
     except Exception as e:
         logging.error(f"Error fetching MX records: {str(e)}")
     
-    # Get NS records
     try:
         command = ['nslookup', '-type=NS', CONFIG["domain"]]
         response = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -650,7 +653,6 @@ def get_dns_records():
 def get_network_info():
     network_info = {}
     
-    # Test connectivity with different DNS servers
     dns_servers = ['8.8.8.8', '1.1.1.1', '208.67.222.222']
     dns_results = {}
     
@@ -667,7 +669,6 @@ def get_network_info():
     
     network_info['dns_connectivity'] = dns_results
     
-    # Test latency with different endpoints
     endpoints = [
         f"https://{CONFIG['domain']}",
         f"http://{CONFIG['domain']}",
@@ -689,7 +690,30 @@ def get_network_info():
     return network_info
 
 def get_latest_transactions():
-    # Try with our primary RPC first
+    try:
+        response = requests.get(f"{CONFIG['bfexplorer_api_url']}/stats", timeout=CONFIG["http_request_timeout"])
+        if response.status_code == 200:
+            data = response.json()
+            if "total_transactions" in data:
+                total_txns = data["total_transactions"]
+                # Formater le nombre de transactions
+                if isinstance(total_txns, str):
+                    # Si c'est une chaîne comme "94.078K", la convertir en nombre
+                    if 'K' in total_txns:
+                        total_txns = float(total_txns.replace('K', '')) * 1000
+                    elif 'M' in total_txns:
+                        total_txns = float(total_txns.replace('M', '')) * 1000000
+                    else:
+                        total_txns = float(total_txns)
+                
+                return {
+                    "total_txns": total_txns,
+                    "formatted_txns": data["total_transactions"],  # Garder le format original pour l'affichage
+                    "source": "bfexplorer API"
+                }
+    except Exception as e:
+        logging.error(f"Error with bfexplorer API: {str(e)}")
+    
     try:
         rpc_payload = {"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["latest", True], "id": 1}
         response = requests.post(CONFIG["rpc_url"], json=rpc_payload, timeout=10)
@@ -705,7 +729,6 @@ def get_latest_transactions():
     except:
         pass
     
-    # If primary fails, try fallback RPCs
     for fallback_url in CONFIG["fallback_rpc_urls"]:
         try:
             rpc_payload = {"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["latest", True], "id": 1}
@@ -722,7 +745,6 @@ def get_latest_transactions():
         except:
             continue
     
-    # If all RPCs fail, try a public block explorer API
     try:
         response = requests.get("https://api.etherscan.io/api?module=proxy&action=eth_blockNumber&apikey=YourApiKeyToken")
         if response.status_code == 200:
@@ -747,13 +769,11 @@ def detect_changes(current_results):
         previous_results = current_results.copy()
         return alerts
     
-    # Check for ping latency changes - seulement si significatif
     if "ping" in current_results and "ping" in previous_results:
         if current_results["ping"]["status"] == "success" and previous_results["ping"]["status"] == "success":
             current_ping = current_results["ping"]["time"]
             previous_ping = previous_results["ping"]["time"]
             
-            # Seulement si la différence est supérieure à 50ms et relative > 20%
             if abs(current_ping - previous_ping) > 50 and current_ping > previous_ping * 1.2:
                 alerts.append({
                     "type": "latency_ping",
@@ -761,13 +781,11 @@ def detect_changes(current_results):
                     "severity": "warning"
                 })
     
-    # Check for RPC latency changes - seulement si significatif
     if "rpc" in current_results and "rpc" in previous_results:
         if current_results["rpc"]["status"] == "online" and previous_results["rpc"]["status"] == "online":
             current_rpc = current_results["rpc"]["response_time"]
             previous_rpc = previous_results["rpc"]["response_time"]
             
-            # Seulement si la différence est supérieure à 0.2s et relative > 20%
             if abs(current_rpc - previous_rpc) > 0.2 and current_rpc > previous_rpc * 1.2:
                 alerts.append({
                     "type": "latency_rpc",
@@ -775,7 +793,6 @@ def detect_changes(current_results):
                     "severity": "warning"
                 })
     
-    # Check for DNS changes
     if "version_info" in current_results and "version_info" in previous_results:
         if current_results["version_info"] != previous_results["version_info"]:
             alerts.append({
@@ -784,7 +801,6 @@ def detect_changes(current_results):
                 "severity": "info"
             })
     
-    # Check for main domain changes
     if "main_domain_info" in current_results and "main_domain_info" in previous_results:
         current_ip = current_results["main_domain_info"].get("ip", "N/A")
         previous_ip = previous_results["main_domain_info"].get("ip", "N/A")
@@ -804,7 +820,6 @@ def detect_changes(current_results):
                 "severity": "info"
             })
     
-    # Check for TXT changes
     if "txt_info" in current_results and "txt_info" in previous_results:
         if current_results["txt_info"] != previous_results["txt_info"]:
             alerts.append({
@@ -813,7 +828,6 @@ def detect_changes(current_results):
                 "severity": "info"
             })
     
-    # Check for IP changes
     if "ip_info" in current_results and "ip_info" in previous_results:
         if current_results["ip_info"] != previous_results["ip_info"]:
             alerts.append({
@@ -822,7 +836,6 @@ def detect_changes(current_results):
                 "severity": "warning"
             })
     
-    # Check for HTTP changes
     if "http_info" in current_results and "http_info" in previous_results:
         if current_results["http_info"] != previous_results["http_info"]:
             alerts.append({
@@ -831,7 +844,6 @@ def detect_changes(current_results):
                 "severity": "info"
             })
     
-    # Check for security changes
     if "security_info" in current_results and "security_info" in previous_results:
         if current_results["security_info"] != previous_results["security_info"]:
             alerts.append({
@@ -840,7 +852,6 @@ def detect_changes(current_results):
                 "severity": "warning"
             })
     
-    # Check for port status changes
     if "ports" in current_results and "ports" in previous_results:
         for port in CONFIG["ports_to_check"]:
             if port in current_results["ports"] and port in previous_results["ports"]:
@@ -851,7 +862,6 @@ def detect_changes(current_results):
                         "severity": "warning"
                     })
     
-    # Update previous results
     previous_results = current_results.copy()
     
     return alerts
@@ -861,29 +871,41 @@ def cleanup_expired_alerts():
     current_time = time.time()
     
     if "alerts" in latest_data:
-        # Supprimer les alertes expirées (plus de 30 minutes) sauf les alertes persistantes
         latest_data["alerts"] = [
             alert for alert in latest_data["alerts"] 
-            if (current_time - alert.get("timestamp", 0) < 1800 or  # 30 minutes = 1800 secondes
-                alert.get("type") in ["rpc_status", "server_status"])  # Alertes persistantes
+            if (current_time - alert.get("timestamp", 0) < 1800 or
+                alert.get("type") in ["rpc_status", "server_status"])
         ]
         
-        # Limiter le nombre total d'alertes (max 10)
         if len(latest_data["alerts"]) > 10:
             latest_data["alerts"] = latest_data["alerts"][-10:]
 
 def update_data():
-    global latest_data, check_history, rpc_status_alert, server_status_alert
+    global latest_data, check_history, rpc_status_alert, server_status_alert, last_ip_log_time
     
     current_time_seconds = time.time()
     timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     logging.info(f"Starting data update at {timestamp_str}")
     
-    # Nettoyer les alertes expirées
     cleanup_expired_alerts()
     
-    # Check RPC
+    # Log IP resolution une fois par minute
+    if current_time_seconds - last_ip_log_time > 60:
+        try:
+            domain_ip = socket.gethostbyname(CONFIG['domain'])
+            logging.info(f"Ping domain: {CONFIG['domain']}, resolved IP: {domain_ip}")
+            
+            from urllib.parse import urlparse
+            parsed_url = urlparse(CONFIG["rpc_url"])
+            rpc_domain = parsed_url.netloc
+            rpc_ip = socket.gethostbyname(rpc_domain)
+            logging.info(f"RPC domain: {rpc_domain}, resolved IP: {rpc_ip}")
+            
+            last_ip_log_time = current_time_seconds
+        except Exception as e:
+            logging.error(f"Error resolving domains: {str(e)}")
+    
     try:
         rpc_result = check_rpc_endpoint()
     except Exception as e:
@@ -892,14 +914,12 @@ def update_data():
     
     rpc_status = rpc_result.get("status", "offline")
     
-    # Check ports - utiliser la fonction alternative
     try:
         port_results = check_ports_alt()
     except Exception as e:
         logging.error(f"Error checking ports: {str(e)}")
         port_results = {}
     
-    # Check ping - utiliser la fonction alternative
     try:
         ping_result = ping_host()
     except Exception as e:
@@ -908,16 +928,13 @@ def update_data():
     
     ping_status = ping_result.get("status", "error")
     
-    # Déterminer le statut global du serveur
     essential_services = [rpc_status, ping_status]
     if any(status in ["online", "success"] for status in essential_services):
         server_status = "online"
     else:
         server_status = "offline"
     
-    # Gérer l'alerte RPC persistante
     if rpc_status_alert is None:
-        # Créer l'alerte RPC si elle n'existe pas
         rpc_status_alert = {
             "type": "rpc_status",
             "message": f"RPC Status: {rpc_status}",
@@ -929,36 +946,21 @@ def update_data():
         }
         latest_data["alerts"].append(rpc_status_alert)
     else:
-        # Mettre à jour l'alerte RPC existante
-        if rpc_status_alert.get("severity") == "warning" and rpc_status == "online":
-            # RPC est revenu en ligne
-            rpc_status_alert["end_time"] = current_time_seconds
-            rpc_status_alert["severity"] = "success"
-            
-            # Calculer la durée de l'indisponibilité
-            duration = current_time_seconds - rpc_status_alert["start_time"]
-            hours = int(duration // 3600)
-            minutes = int((duration % 3600) // 60)
-            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-            
-            rpc_status_alert["message"] = f"✅ RPC is back online after {duration_str}"
-        elif rpc_status_alert.get("severity") == "success" and rpc_status == "offline":
-            # RPC est redevenu hors ligne
-            rpc_status_alert["start_time"] = current_time_seconds
+        if rpc_status == "online":
+            rpc_status_alert["severity"] = "info"
+            rpc_status_alert["message"] = "✅ RPC Status: online"
             rpc_status_alert["end_time"] = None
+            rpc_status_alert["start_time"] = None
+        else:
+            if rpc_status_alert.get("severity") == "info":
+                rpc_status_alert["start_time"] = current_time_seconds
+                rpc_status_alert["end_time"] = None
             rpc_status_alert["severity"] = "warning"
             rpc_status_alert["message"] = f"⚠️ RPC is down since {datetime.fromtimestamp(current_time_seconds).strftime('%Y-%m-%d %H:%M:%S')}"
-        elif rpc_status_alert.get("severity") == "warning" and rpc_status == "offline":
-            # RPC reste hors ligne - mettre à jour le message
-            start_time = rpc_status_alert.get("start_time", current_time_seconds)
-            rpc_status_alert["message"] = f"⚠️ RPC is down since {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}"
         
-        # Mettre à jour le timestamp pour éviter l'expiration
         rpc_status_alert["timestamp"] = current_time_seconds
     
-    # Gérer l'alerte Serveur persistante
     if server_status_alert is None:
-        # Créer l'alerte Serveur si elle n'existe pas
         server_status_alert = {
             "type": "server_status",
             "message": f"Server Status: {server_status}",
@@ -970,62 +972,44 @@ def update_data():
         }
         latest_data["alerts"].append(server_status_alert)
     else:
-        # Mettre à jour l'alerte Serveur existante
-        if server_status_alert.get("severity") == "warning" and server_status == "online":
-            # Serveur est revenu en ligne
-            server_status_alert["end_time"] = current_time_seconds
-            server_status_alert["severity"] = "success"
-            
-            # Calculer la durée de l'indisponibilité
-            duration = current_time_seconds - server_status_alert["start_time"]
-            hours = int(duration // 3600)
-            minutes = int((duration % 3600) // 60)
-            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-            
-            server_status_alert["message"] = f"✅ Server is back online after {duration_str}"
-        elif server_status_alert.get("severity") == "success" and server_status == "offline":
-            # Serveur est redevenu hors ligne
-            server_status_alert["start_time"] = current_time_seconds
+        if server_status == "online":
+            server_status_alert["severity"] = "info"
+            server_status_alert["message"] = "✅ Server Status: online"
             server_status_alert["end_time"] = None
+            server_status_alert["start_time"] = None
+        else:
+            if server_status_alert.get("severity") == "info":
+                server_status_alert["start_time"] = current_time_seconds
+                server_status_alert["end_time"] = None
             server_status_alert["severity"] = "warning"
             server_status_alert["message"] = f"⚠️ Server is down since {datetime.fromtimestamp(current_time_seconds).strftime('%Y-%m-%d %H:%M:%S')}"
-        elif server_status_alert.get("severity") == "warning" and server_status == "offline":
-            # Serveur reste hors ligne - mettre à jour le message
-            start_time = server_status_alert.get("start_time", current_time_seconds)
-            server_status_alert["message"] = f"⚠️ Server is down since {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}"
         
-        # Mettre à jour le timestamp pour éviter l'expiration
         server_status_alert["timestamp"] = current_time_seconds
     
-    # Check IP
     try:
         ip_info = get_ip_info()
     except Exception as e:
         logging.error(f"Error getting IP info: {str(e)}")
         ip_info = "Error"
     
-    # Check HTTP
     try:
         http_info = get_http_info()
     except Exception as e:
         logging.error(f"Error getting HTTP info: {str(e)}")
         http_info = "Error"
     
-    # Check security
     try:
         security_info = get_security_info()
     except Exception as e:
         logging.error(f"Error getting security info: {str(e)}")
         security_info = "Error"
     
-    # Check SSL
     try:
         ssl_info = get_ssl_info()
     except Exception as e:
         logging.error(f"Error getting SSL info: {str(e)}")
         ssl_info = {"error": str(e)}
     
-    # Check DNS
     try:
         if current_time_seconds - (latest_data.get("last_dns_check", 0)) > CONFIG["dns_check_interval"]:
             version_info = get_dns_serial()
@@ -1036,42 +1020,42 @@ def update_data():
         logging.error(f"Error getting DNS version: {str(e)}")
         version_info = "Error"
     
-    # Check TXT Records
     try:
         txt_info = get_txt_records()
     except Exception as e:
         logging.error(f"Error getting TXT records: {str(e)}")
         txt_info = []
     
-    # Check DNS records
     try:
         dns_records = get_dns_records()
     except Exception as e:
         logging.error(f"Error getting DNS records: {str(e)}")
         dns_records = {}
     
-    # Check network info
     try:
         network_info = get_network_info()
     except Exception as e:
         logging.error(f"Error getting network info: {str(e)}")
         network_info = {}
     
-    # Check transactions
     try:
         transactions_info = get_latest_transactions()
     except Exception as e:
         logging.error(f"Error getting transactions: {str(e)}")
         transactions_info = {"error": str(e)}
     
-    # Check main domain
     try:
         main_domain_info = get_main_domain_info()
     except Exception as e:
         logging.error(f"Error getting main domain info: {str(e)}")
         main_domain_info = {"ip": "Error", "redirect": "Error"}
     
-    # Détecter les changements et anomalies
+    try:
+        ip_consistent = verify_ip_consistency()
+    except Exception as e:
+        logging.error(f"Error verifying IP consistency: {str(e)}")
+        ip_consistent = False
+    
     current_results = {
         "rpc": rpc_result,
         "ports": port_results,
@@ -1086,12 +1070,12 @@ def update_data():
         "network_info": network_info,
         "transactions": transactions_info,
         "main_domain_info": main_domain_info,
+        "ip_consistent": ip_consistent,
         "timestamp": timestamp_str
     }
     
     try:
         new_alerts = detect_changes(current_results)
-        # Ajouter un timestamp à chaque nouvelle alerte
         for alert in new_alerts:
             alert["timestamp"] = current_time_seconds
         alerts = new_alerts
@@ -1099,28 +1083,26 @@ def update_data():
         logging.error(f"Error detecting changes: {str(e)}")
         alerts = []
     
-    # Mettre à jour les alertes en évitant les doublons récents
     if "alerts" not in latest_data:
         latest_data["alerts"] = []
     
-    # Vérifier les doublons (même message dans les 5 dernières minutes)
     existing_messages = [
         alert["message"] for alert in latest_data["alerts"] 
-        if current_time_seconds - alert.get("timestamp", 0) < 300  # 5 minutes
-        and not alert.get("persistent", False)  # Ne pas considérer les alertes persistantes
+        if current_time_seconds - alert.get("timestamp", 0) < 300
+        and not alert.get("persistent", False)
     ]
     
     for alert in alerts:
         if alert["message"] not in existing_messages:
             latest_data["alerts"].append(alert)
     
-    # Update global data
     latest_data.update({
         "server_status": server_status,
         "rpc_status": rpc_status,
         "ping_status": ping_status,
         "ping_value": ping_result.get("time", 0) if ping_status == "success" else None,
-        "rpc_value": rpc_result.get("response_time", 0) if rpc_status == "online" else None,
+        # Convertir le temps de réponse RPC en millisecondes
+        "rpc_value": rpc_result.get("response_time", 0) * 1000 if rpc_status == "online" else None,
         "version_info": version_info,
         "ip_info": ip_info,
         "http_info": http_info,
@@ -1132,23 +1114,22 @@ def update_data():
         "transactions": transactions_info,
         "main_domain_info": main_domain_info,
         "port_statuses": port_results,
+        "ip_consistent": ip_consistent,
         "last_check": timestamp_str,
-        "alerts": latest_data["alerts"]  # Utiliser les alertes mises à jour
+        "alerts": latest_data["alerts"]
     })
     
     logging.info(f"Data updated with {len(latest_data['alerts'])} alerts")
     
-    # Add to history
     check_history.append({
         "ping": ping_result.get("time", 0),
-        "rpc": rpc_result.get("response_time", 0) if rpc_status == "online" else None,
+        "rpc": rpc_result.get("response_time", 0) * 1000 if rpc_status == "online" else None,
         "timestamp": timestamp_str
     })
     
     if len(check_history) > CONFIG["history_size"]:
         check_history.pop(0)
     
-    # Update history in latest_data
     latest_data["history"] = check_history.copy()
 
 def monitor_loop():
@@ -1162,24 +1143,21 @@ def ping_monitor_loop():
         ping_result = ping_host()
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Mettre à jour les données de ping dans latest_data
         latest_data["ping_status"] = ping_result.get("status", "error")
         latest_data["ping_value"] = ping_result.get("time", 0) if ping_result.get("status") == "success" else None
         
-        # Ajouter à l'historique du ping
         ping_history.append({
             "ping": ping_result.get("time", 0),
             "timestamp": timestamp
         })
         
-        # Limiter la taille de l'historique
         if len(ping_history) > 20:
             ping_history.pop(0)
         
         latest_data["ping_history"] = ping_history.copy()
+        
         time.sleep(ping_update_interval)
 
-# Routes Flask
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -1188,109 +1166,13 @@ def index():
 def get_data():
     return jsonify(latest_data)
 
-@app.route('/api/history')
-def get_history():
-    return jsonify(latest_data.get("history", []))
-
-@app.route('/api/alerts')
-def get_alerts():
-    return jsonify(latest_data.get("alerts", []))
-
-@app.route('/api/ssl')
-def get_ssl():
-    return jsonify(latest_data.get("ssl_info", {}))
-
-@app.route('/api/dns')
-def get_dns():
-    return jsonify(latest_data.get("dns_records", {}))
-
-@app.route('/api/network')
-def get_network():
-    return jsonify(latest_data.get("network_info", {}))
-
-@app.route('/api/transactions')
-def get_transactions():
-    return jsonify(latest_data.get("transactions", {}))
-
-@app.route('/api/dismiss_alert', methods=['POST'])
-def dismiss_alert():
-    global latest_data
-    
-    data = request.json
-    index = data.get('index')
-    
-    if index is not None and "alerts" in latest_data:
-        if 0 <= index < len(latest_data["alerts"]):
-            # Vérifier si l'alerte est persistante
-            alert = latest_data["alerts"][index]
-            if not alert.get("persistent", False):
-                # Supprimer l'alerte seulement si elle n'est pas persistante
-                latest_data["alerts"].pop(index)
-                return jsonify({"success": True, "alerts": latest_data["alerts"]})
-            else:
-                # Ne pas supprimer les alertes persistantes
-                return jsonify({"success": False, "message": "Cannot dismiss persistent alerts"})
-    
-    return jsonify({"success": False})
-
-@app.route('/api/clear_alerts', methods=['POST'])
-def clear_alerts():
-    global latest_data
-    
-    # Ne supprimer que les alertes non persistantes
-    latest_data["alerts"] = [alert for alert in latest_data["alerts"] if alert.get("persistent", False)]
-    return jsonify({"success": True, "alerts": latest_data["alerts"]})
-
-@app.route('/api/update_interval', methods=['POST'])
-def update_interval():
-    global CONFIG
-    data = request.json
-    interval = data.get('interval', 60)
-    unit = data.get('unit', 'seconds')
-    
-    if unit == 'minutes':
-        interval = interval * 60
-    elif unit == 'hours':
-        interval = interval * 60 * 60
-    elif unit == 'days':
-        interval = interval * 60 * 60 * 24
-    
-    CONFIG["check_interval"] = interval
-    return jsonify({"success": True, "interval": CONFIG["check_interval"]})
-
-if __name__ == "__main__":
-    # Configuration pour Render
-    port = int(os.environ.get('PORT', 5000))
-    
-    # Forcer l'activation des vérifications DNS sur Render
-    if os.environ.get('RENDER') == 'true':
-        os.environ['FORCE_DNS_CHECKS'] = 'true'
-        logging.info("Forcing DNS checks on Render environment")
-    
-    # Initialize DNS serial
-    if last_dns_serial is None:
-        logging.info("Initial DNS serial retrieval...")
-        last_dns_serial = get_dns_serial()
-        latest_data["version_info"] = last_dns_serial
-    
-    # Perform first data update
-    logging.info("First data update...")
-    update_data()
-    
-    # Start background monitoring
-    monitor_thread = threading.Thread(target=monitor_loop)
-    monitor_thread.daemon = True
+if __name__ == '__main__':
+    monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
     monitor_thread.start()
     
-    # Start ping monitoring
-    ping_monitor_thread = threading.Thread(target=ping_monitor_loop)
-    ping_monitor_thread.daemon = True
-    ping_monitor_thread.start()
+    ping_thread = threading.Thread(target=ping_monitor_loop, daemon=True)
+    ping_thread.start()
     
-    # Ne pas ouvrir le navigateur sur Render
-    if os.environ.get('RENDER') != 'true':
-        webbrowser.open(f'http://localhost:{port}')
+    update_data()
     
-    # Start web server
-    print(f"Web server started at http://localhost:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=CONFIG["web_port"], debug=False)
