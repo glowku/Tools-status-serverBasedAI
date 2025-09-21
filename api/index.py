@@ -1,9 +1,15 @@
-import sys
-import os
+# api/index.py
+from flask import Flask
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+app = Flask(__name__)
 
-from app import app
+@app.route('/')
+def home():
+    return "Test Vercel - Ça marche !"
+
+@app.route('/api/test')
+def test():
+    return {"status": "ok", "message": "Fonctionne"}
 
 def handler(event, context):
     return app(event, context)
