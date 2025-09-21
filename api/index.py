@@ -11,3 +11,4 @@ from app import app
 # Handler pour Vercel - ça remplace le "python app.py"
 def handler(event, context):
     return app(event, context)
+
