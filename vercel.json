@@ -1,17 +1,13 @@
 {
   "functions": {
-    "handler.py": {
-      "runtime": "@vercel/python"
+    "api/index.py": {
+      "runtime": "@vercel/python@4.0.0"
     }
   },
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "/static/$1"
-    },
-    {
       "src": "/(.*)",
-      "dest": "handler.py"
+      "dest": "api/index.py"
     }
   ]
 }
