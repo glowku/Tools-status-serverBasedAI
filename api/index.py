@@ -5,9 +5,8 @@ import os
 # Ajouter le répertoire parent au chemin
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Importer TON app.py directement
 from app import app
 
-# Handler pour Vercel - ça remplace "python app.py"
+# Handler pour Vercel
 def handler(event, context):
     return app(event, context)
